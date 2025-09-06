@@ -83,12 +83,7 @@ def display_label_multiline(latin: str) -> str:
     return latin
 
 def format_title(species_latin: str, total_count: int) -> str:
-    """
-    Titel för artspecifika diagram:
-    - om svenskt namn finns: 'Svenskt namn (Latinskt), antal observerade beteenden: NN'
-    - annars: 'Latinskt namn, antal observerade beteenden: NN'
-    (för Chiroptera/Nyctaloid saknas prefix – de har None i ordboken)
-    """
+    """Titel: 'Svenskt namn (Latinskt), antal observerade beteenden: NN' eller bara latinskt namn."""
     sv = LATIN_TO_SV.get(species_latin)
     if sv:
         return f"{sv} ({species_latin}), antal observerade beteenden: {int(total_count)}"
@@ -445,12 +440,92 @@ open_file(out_path)
 print(f"Klar! Sparad fil: {out_path}")
 
 # ================== STEG 2: (valfritt) Skapa fladdermusdiagram ==================
+def _compute_file_ymax(input_file, custom_time_range):
+    """Beräknar max staplad topp (per 15-min intervall) för valfri fil – används för global Y-skala."""
+    try:
+        df = pd.read_excel(input_file)
+        df["species_type_list"] = df["MANUAL ID"].map(extract_species_and_type)
+
+        # Intervall från TIME → 'HH:MM' avrundat nedåt till 15 min
+        def time_to_interval(val):
+            hm = _hm_from_any(val)
+            if hm is None:
+                return ""
+            h, m = hm
+            minutes = int((m // 15) * 15)
+            return f"{h:02d}:{minutes:02d}"
+        df["interval"] = df["TIME"].map(time_to_interval)
+
+        df_long = df.explode("species_type_list")
+        df_long = df_long[df_long["species_type_list"].notna()]
+        if df_long.empty:
+            return 0
+        df_long[["species", "obs_type"]] = pd.DataFrame(df_long["species_type_list"].tolist(), index=df_long.index)
+        df_long = df_long[df_long["species"].astype(str).str.strip().str.lower() != "noise"]
+        df_long = df_long[df_long["species"].astype(str).str.strip() != ""]
+
+        # Tidsintervall (global logik måste spegla det som används vid plottning)
+        if custom_time_range:
+            min_dt = str_to_dt(custom_time_range[0] + ":00")
+            max_dt = str_to_dt(custom_time_range[1] + ":00")
+            if min_dt is None or max_dt is None:
+                return 0
+            min_dt = round_down_15(min_dt)
+            max_dt = round_up_15(max_dt)
+        else:
+            dt_series = df["TIME"].apply(str_to_dt).dropna()
+            if len(dt_series) == 0:
+                ints = [s for s in df["interval"].astype(str).tolist() if s and s.lower() != "nan"]
+                dt_from_int = [interval_to_sortkey(s) for s in ints]
+                dt_from_int = [d for d in dt_from_int if d is not None]
+                if not dt_from_int:
+                    return 0
+                min_dt = round_down_15(min(dt_from_int))
+                max_dt = round_up_15(max(dt_from_int))
+            else:
+                min_dt = round_down_15(min(dt_series))
+                max_dt = round_up_15(max(dt_series))
+
+        all_intervals = []
+        t = min_dt
+        while t <= max_dt:
+            all_intervals.append(t.strftime("%H:%M"))
+            t += timedelta(minutes=15)
+        all_intervals = list(dict.fromkeys(all_intervals))
+
+        # Staplad max per art
+        agg = df_long.groupby(["interval", "species", "obs_type"]).size().reset_index(name="antal")
+        agg["interval"] = pd.Categorical(agg["interval"], categories=all_intervals, ordered=True)
+        type_order = ["Socialt", "Födosökande", "Förbiflygande"]
+
+        y_max_file = 0
+        for sp in df_long["species"].unique():
+            plot_data = (
+                agg[agg["species"] == sp]
+                .pivot(index="interval", columns="obs_type", values="antal")
+                .fillna(0)
+                .reindex(all_intervals, fill_value=0)
+                .reindex(columns=type_order, fill_value=0)
+            )
+            if not plot_data.empty:
+                y_max_file = max(y_max_file, int(plot_data.sum(axis=1).max()))
+        return y_max_file
+    except Exception:
+        return 0
+
 def generate_bat_diagrams(input_files_list, diagrams_root, custom_time_range):
     """
     Skapar diagram (linjer + staplar) för en lista av filer.
-    - diagrams_root: befintlig mål-mapp
-    - custom_time_range: None (auto) eller tuple("HH:MM", "HH:MM")
+    Nu med GLOBAL Y-skala (samma för alla filer).
     """
+    # ---- Global Y-skala: ta max från alla filer (i samma tidslogik som plottning) ----
+    global_y_max = 0
+    for p in input_files_list:
+        global_y_max = max(global_y_max, _compute_file_ymax(p, custom_time_range))
+    y_lim_global = max(1, math.ceil(global_y_max * 1.05))
+    print(f"Global gemensam Y-max (linje + stapel) för alla filer: {y_lim_global}")
+
+    # ---- Generering av diagram per fil (alla använder y_lim_global) ----
     for input_file in input_files_list:
         print(f"\nBearbetar: {os.path.basename(input_file)}")
 
@@ -487,7 +562,8 @@ def generate_bat_diagrams(input_files_list, diagrams_root, custom_time_range):
             min_dt = str_to_dt(custom_time_range[0] + ":00")
             max_dt = str_to_dt(custom_time_range[1] + ":00")
             if min_dt is None or max_dt is None:
-                raise ValueError("Kunde inte tolka manuellt intervall.")
+                print("Fel i manuellt intervall. Hoppar över filen.")
+                continue
             min_dt = round_down_15(min_dt)
             max_dt = round_up_15(max_dt)
         else:
@@ -497,14 +573,15 @@ def generate_bat_diagrams(input_files_list, diagrams_root, custom_time_range):
                 dt_from_int = [interval_to_sortkey(s) for s in ints]
                 dt_from_int = [d for d in dt_from_int if d is not None]
                 if not dt_from_int:
-                    raise ValueError("Inga giltiga tider hittades i TIME/Tid-kolumnen.")
+                    print("Inga giltiga tider. Hoppar över filen.")
+                    continue
                 min_dt = round_down_15(min(dt_from_int))
                 max_dt = round_up_15(max(dt_from_int))
             else:
                 min_dt = round_down_15(min(dt_series))
                 max_dt = round_up_15(max(dt_series))
 
-        # Alla 15-minutersintervall
+        # Lista med alla 15-minutersintervall
         all_intervals = []
         t = min_dt
         while t <= max_dt:
@@ -512,39 +589,16 @@ def generate_bat_diagrams(input_files_list, diagrams_root, custom_time_range):
             t += timedelta(minutes=15)
         all_intervals = list(dict.fromkeys(all_intervals))
 
-        # Aggregering
+        # Aggregering för diagram
         agg = df_long.groupby(["interval", "species", "obs_type"]).size().reset_index(name="antal")
         agg["interval"] = pd.Categorical(agg["interval"], categories=all_intervals, ordered=True)
         species_list = sorted(df_long["species"].unique())
-
-        # Gemensam Y-skala (referens = art med högsta stapelsumma)
-        def compute_ymax_for_species(species_name, column_order):
-            if not species_name:
-                return 0
-            pd_sp = (
-                agg[agg["species"] == species_name]
-                .pivot(index="interval", columns="obs_type", values="antal")
-                .fillna(0)
-                .reindex(all_intervals, fill_value=0)
-                .reindex(columns=column_order, fill_value=0)
-            )
-            if pd_sp.empty:
-                return 0
-            return int(pd_sp.sum(axis=1).max())
-
-        type_order = ["Socialt", "Födosökande", "Förbiflygande"]
-        species_totals = df_long.groupby("species").size().sort_values(ascending=False)
-        ref_species = species_totals.index[0] if not species_totals.empty else None
-        y_max_ref = compute_ymax_for_species(ref_species, type_order)
-        y_lim = max(1, math.ceil(y_max_ref * 1.05))
-        print(f"Ref art: {ref_species} | gemensam Y-max (linje + stapel): {y_lim}")
 
         # LINJEDIAGRAM (samlat)
         agg_line = df_long.groupby(["interval", "species"]).size().reset_index(name="antal")
         agg_line["interval"] = pd.Categorical(agg_line["interval"], categories=all_intervals, ordered=True)
         pivot_line = agg_line.pivot(index="interval", columns="species", values="antal").fillna(0)
         pivot_line = pivot_line.reindex(all_intervals, fill_value=0)
-
         total_obs = df_long.shape[0]
 
         plt.figure(figsize=(12, 6))
@@ -557,7 +611,7 @@ def generate_bat_diagrams(input_files_list, diagrams_root, custom_time_range):
         ax_all.yaxis.set_major_locator(MaxNLocator(integer=True))
         ax_all.set_xticks(range(len(pivot_line.index)))
         ax_all.set_xticklabels(pivot_line.index, rotation=270)
-        ax_all.set_ylim(0, y_lim)
+        ax_all.set_ylim(0, y_lim_global)
         plt.tight_layout()
         plt.grid(True, axis='y')
         plt.savefig(os.path.join(output_dir_lines, "alla_arter.png"))
@@ -575,7 +629,7 @@ def generate_bat_diagrams(input_files_list, diagrams_root, custom_time_range):
             ax.yaxis.set_major_locator(MaxNLocator(integer=True))
             ax.set_xticks(range(len(pivot_line.index)))
             ax.set_xticklabels(pivot_line.index, rotation=270)
-            ax.set_ylim(0, y_lim)
+            ax.set_ylim(0, y_lim_global)
             plt.grid(True, axis='y')
             plt.tight_layout()
             plt.savefig(os.path.join(output_dir_lines, f"{safe_filename(species)}.png"))
@@ -585,6 +639,7 @@ def generate_bat_diagrams(input_files_list, diagrams_root, custom_time_range):
         output_dir_stacks_art = output_dir_stacks + "_ART"
         os.makedirs(output_dir_stacks_art, exist_ok=True)
         color_art = ["#eb09d8", "#d98fd3", "#abaaa9"]  # Socialt, Födosökande, Förbiflygande
+        type_order = ["Socialt", "Födosökande", "Förbiflygande"]
 
         for species in species_list:
             plot_data = (
@@ -600,7 +655,7 @@ def generate_bat_diagrams(input_files_list, diagrams_root, custom_time_range):
             plt.title(format_title(species, int(plot_data.values.sum())))
             plt.legend(title="Beteendetyper")
             ax.yaxis.set_major_locator(MaxNLocator(integer=True))
-            ax.set_ylim(0, y_lim)
+            ax.set_ylim(0, y_lim_global)
             plt.xticks(rotation=270)
             plt.tight_layout()
             plt.grid(True, axis='y')
@@ -629,7 +684,7 @@ def generate_bat_diagrams(input_files_list, diagrams_root, custom_time_range):
             plt.title(format_title(species, int(plot_data.values.sum())))
             plt.legend(title="Beteendetyper")
             ax.yaxis.set_major_locator(MaxNLocator(integer=True))
-            ax.set_ylim(0, y_lim)
+            ax.set_ylim(0, y_lim_global)
             plt.xticks(rotation=270)
             plt.tight_layout()
             plt.grid(True, axis='y')
