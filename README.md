@@ -156,10 +156,6 @@ Results/
 Intern projektskript för rapportering. Justera efter behov. Frågor/förslag: öppna ett ärende i repo eller kontakta projektgruppen.
 
 
-## Licens
-
-Intern projektfil. Lägg gärna till licens vid behov.
-
 ## Förslag på `.gitignore`
 
 ```
