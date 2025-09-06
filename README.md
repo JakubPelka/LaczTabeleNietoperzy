@@ -153,7 +153,7 @@ Results/
 
 ## Licens & kontakt
 
-Intern projektskript för rapportering. Justera efter behov. Frågor/förslag: öppna ett ärende i repo eller kontakta projektgruppen.
+Intern projektskript för rapportering. Justera efter behov. Frågor/förslag: öppna ett ärende i repo eller kontakta Paulina Wietrzyk-Pelka.
 
 
 ## Förslag på `.gitignore`
