@@ -9,7 +9,7 @@ from datetime import datetime, timedelta
 from matplotlib.ticker import MaxNLocator
 
 import tkinter as tk
-from tkinter import filedialog, messagebox, simpledialog
+from tkinter import filedialog, messagebox, simpledialog, ttk, colorchooser
 
 from openpyxl import load_workbook
 from openpyxl.styles import Alignment, PatternFill, Font, Border, Side
@@ -55,20 +55,6 @@ def fill_from_hex(hex_rgb: str) -> PatternFill:
     return PatternFill("solid", fgColor=hex_to_argb(hex_rgb))
 
 FILL_HDR = fill_from_hex(HEX_HEADER_BG)
-
-# Fyllningsscheman för tabellen: Förbiflygande har alltid samma ljusgrå
-SCHEME_NVI_TABLE = {
-    "Socialt":       fill_from_hex(HEX_NVI_SOC),
-    "Födosökande":   fill_from_hex(HEX_NVI_FODO),
-    "Fodosökande":   fill_from_hex(HEX_NVI_FODO),  # tolerans för stavning utan diakritik
-    "Förbiflygande": fill_from_hex(HEX_TABLE_FORBI),
-}
-SCHEME_ART_TABLE = {
-    "Socialt":       fill_from_hex(HEX_ART_SOC),
-    "Födosökande":   fill_from_hex(HEX_ART_FODO),
-    "Fodosökande":   fill_from_hex(HEX_ART_FODO),
-    "Förbiflygande": fill_from_hex(HEX_TABLE_FORBI),  # identisk med NVI-tabell
-}
 
 # ================== Ordbok: Latin → Svenska ==================
 LATIN_TO_SV = {
@@ -243,44 +229,288 @@ def count_nights(df):
     nights = pd.Series(night_key).dropna().nunique()
     return int(nights) if nights else None
 
-# ================== STEG 1: Välj indata och basnamn ==================
-root = tk.Tk(); root.withdraw()
+# ================== GUI: samlingspanel för input, utdata, tider och färger ==================
+def _validate_hex(s):
+    s = (s or "").strip()
+    if not s:
+        return None
+    if s.startswith("#"):
+        s = s[1:]
+    if len(s) != 6 or any(c not in "0123456789abcdefABCDEF" for c in s):
+        return None
+    return "#" + s.upper()
 
-input_files = filedialog.askopenfilenames(
-    title=TITLE_OPEN, filetypes=[("Excel-filer (.xlsx)", "*.xlsx")]
-)
-if not input_files:
-    print("Ingen fil vald. Avslutar.")
-    sys.exit(0)
-input_files = [p for p in input_files if p.lower().endswith(".xlsx")]
-if not input_files:
-    print("Endast .xlsx stöds. Avslutar.")
-    sys.exit(0)
+def gui_collect_settings(
+    default_colors_nvi=("FF0000","FFC000","A9A9A9"),   # Socialt, Födosökande, Förbiflygande
+    default_colors_art=("EB09D8","D98FD3","ABAAA9"),   # Socialt, Födosökande, Förbiflygande
+    default_basename="sammanstallning_fladdermus"
+):
+    """Visar ett fönster och returnerar en dict med valen. Avbryt → sys.exit(0)."""
+    root = tk.Tk()
+    root.title("Fladdermus – sammanställning & diagram (GUI)")
+    root.geometry("860x760")
+    root.minsize(800, 640)
 
-out_base = filedialog.asksaveasfilename(
-    title=TITLE_SAVE, defaultextension=".xlsx",
-    initialfile=DEFAULT_OUT, filetypes=[("Excel-fil (.xlsx)", "*.xlsx")]
-)
-if not out_base:
-    print("Ingen plats vald. Avslutar.")
-    sys.exit(0)
+    main = ttk.Frame(root, padding=12)
+    main.pack(fill="both", expand=True)
 
-# --- Skapa mappen Results och spara båda Excel-filer där ---
-base_dir  = os.path.dirname(out_base)
-base_name = os.path.splitext(os.path.basename(out_base))[0]
+    # ---------- INDATA ----------
+    lf_in = ttk.LabelFrame(main, text="Indatafiler")
+    lf_in.pack(fill="both", expand=False, padx=0, pady=(0,10))
+
+    files_list = tk.Listbox(lf_in, height=7, selectmode="extended")
+    files_list.grid(row=0, column=0, rowspan=3, sticky="nsew", padx=(8,8), pady=8)
+    lf_in.columnconfigure(0, weight=1)
+    lf_in.rowconfigure(0, weight=1)
+
+    def add_files():
+        paths = filedialog.askopenfilenames(
+            title="Välj en eller flera Excel-filer",
+            filetypes=[("Excel-filer", "*.xlsx"), ("Alla filer", "*.*")]
+        )
+        if not paths: return
+        for p in paths:
+            files_list.insert(tk.END, p)
+
+    def clear_files():
+        files_list.delete(0, tk.END)
+
+    ttk.Button(lf_in, text="Lägg till filer…", command=add_files).grid(row=0, column=1, sticky="ew", padx=(0,8), pady=(8,4))
+    ttk.Button(lf_in, text="Rensa listan", command=clear_files).grid(row=1, column=1, sticky="ew", padx=(0,8))
+
+    # ---------- UTDATA ----------
+    lf_out = ttk.LabelFrame(main, text="Utdatakatalog och basnamn")
+    lf_out.pack(fill="x", expand=False, pady=(0,10))
+
+    var_outdir = tk.StringVar(value="")
+    var_basename = tk.StringVar(value=default_basename)
+
+    def pick_outdir():
+        d = filedialog.askdirectory(title="Välj mapp där 'Results' ska skapas")
+        if d:
+            var_outdir.set(d)
+
+    ttk.Label(lf_out, text="Basnamn (utan ändelse):").grid(row=0, column=0, sticky="w", padx=8, pady=(8,4))
+    ttk.Entry(lf_out, textvariable=var_basename).grid(row=0, column=1, sticky="ew", padx=8, pady=(8,4))
+    ttk.Label(lf_out, text="Mapp för 'Results/':").grid(row=1, column=0, sticky="w", padx=8)
+    ttk.Entry(lf_out, textvariable=var_outdir).grid(row=1, column=1, sticky="ew", padx=8)
+    ttk.Button(lf_out, text="Välj mapp…", command=pick_outdir).grid(row=1, column=2, sticky="ew", padx=(0,8))
+    lf_out.columnconfigure(1, weight=1)
+
+    # ---------- DIAGRAM ----------
+    lf_plot = ttk.LabelFrame(main, text="Diagram (valfritt)")
+    lf_plot.pack(fill="x", expand=False, pady=(0,10))
+
+    var_do_plots = tk.BooleanVar(value=True)
+    var_time_mode = tk.StringVar(value="auto")  # "auto" eller "manual"
+    var_tstart = tk.StringVar(value="22:00")
+    var_tend   = tk.StringVar(value="02:00")
+
+    def toggle_time_entries():
+        state = "disabled" if var_time_mode.get()=="auto" or not var_do_plots.get() else "normal"
+        ent_start.config(state=state)
+        ent_end.config(state=state)
+
+    ttk.Checkbutton(lf_plot, text="Generera diagram", variable=var_do_plots, command=toggle_time_entries)\
+        .grid(row=0, column=0, sticky="w", padx=8, pady=(8,4), columnspan=4)
+
+    ttk.Radiobutton(lf_plot, text="X-axel: automatisk (från data)", value="auto", variable=var_time_mode, command=toggle_time_entries)\
+        .grid(row=1, column=0, sticky="w", padx=8)
+    ttk.Radiobutton(lf_plot, text="X-axel: eget intervall", value="manual", variable=var_time_mode, command=toggle_time_entries)\
+        .grid(row=1, column=1, sticky="w")
+
+    ttk.Label(lf_plot, text="Starttid (HH:MM):").grid(row=2, column=0, sticky="e", padx=8, pady=(4,8))
+    ent_start = ttk.Entry(lf_plot, textvariable=var_tstart, width=10)
+    ent_start.grid(row=2, column=1, sticky="w", pady=(4,8))
+
+    ttk.Label(lf_plot, text="Sluttid (HH:MM):").grid(row=2, column=2, sticky="e", padx=8, pady=(4,8))
+    ent_end = ttk.Entry(lf_plot, textvariable=var_tend, width=10)
+    ent_end.grid(row=2, column=3, sticky="w", pady=(4,8))
+
+    # Valfri målmapp för diagram (default: Results/diagramer)
+    ttk.Label(lf_plot, text="Bas-mapp för diagram (valfritt):").grid(row=3, column=0, sticky="e", padx=8, pady=(0,8))
+    var_diagdir = tk.StringVar(value="")
+    ent_diag = ttk.Entry(lf_plot, textvariable=var_diagdir)
+    ent_diag.grid(row=3, column=1, sticky="ew", padx=8, pady=(0,8), columnspan=2)
+    def pick_diagdir():
+        d = filedialog.askdirectory(title="Välj bas-mapp för diagram (om tomt → Results/diagramer)")
+        if d:
+            var_diagdir.set(d)
+    ttk.Button(lf_plot, text="Välj mapp…", command=pick_diagdir).grid(row=3, column=3, sticky="ew", pady=(0,8))
+    lf_plot.columnconfigure(1, weight=1)
+
+    # ---------- FÄRGER (z paletą) ----------
+    lf_colors = ttk.LabelFrame(main, text="Färger (valfritt – lämna tomt för standard)")
+    lf_colors.pack(fill="x", expand=False)
+
+    # Pomocnicze: aktualizacja podglądu przy zmianie wartości
+    def bind_preview(var, preview_widget):
+        def _cb(*_):
+            hx = _validate_hex(var.get())
+            preview_widget.config(background=(hx or "#FFFFFF"))
+        var.trace_add("write", _cb)
+        _cb()
+
+    def color_row(row, label_text, vars_tuple):
+        ttk.Label(lf_colors, text=label_text).grid(row=row, column=0, sticky="w", padx=8, pady=(8,2))
+        entries = []
+        previews = []
+        def mk_one(col_ix, var):
+            # Entry
+            e = ttk.Entry(lf_colors, textvariable=var, width=10)
+            e.grid(row=row, column=1 + col_ix*3, padx=(4,2), pady=(8,2), sticky="w")
+            entries.append(e)
+            # Preview (Label jako próbnik koloru)
+            prev = tk.Label(lf_colors, text="  ", width=3, relief="groove")
+            prev.grid(row=row, column=2 + col_ix*3, padx=(0,2), pady=(8,2), sticky="w")
+            previews.append(prev)
+            bind_preview(var, prev)
+            # Button „Välj…”
+            def choose():
+                init = _validate_hex(var.get()) or "#FFFFFF"
+                rgb, hx = colorchooser.askcolor(color=init, title="Välj färg")
+                if hx:
+                    var.set(hx.upper())
+            ttk.Button(lf_colors, text="Välj…", command=choose)\
+                .grid(row=row, column=3 + col_ix*3, padx=(0,6), pady=(8,2), sticky="w")
+
+        for i, v in enumerate(vars_tuple):
+            mk_one(i, v)
+
+    # Zmienne HEX (startowe: standard)
+    var_nvi_soc   = tk.StringVar(value="#FF0000")
+    var_nvi_fodo  = tk.StringVar(value="#FFC000")
+    var_nvi_forbi = tk.StringVar(value="#A9A9A9")
+    var_art_soc   = tk.StringVar(value="#EB09D8")
+    var_art_fodo  = tk.StringVar(value="#D98FD3")
+    var_art_forbi = tk.StringVar(value="#ABAAA9")
+
+    color_row(0, "NVI – Socialt / Födosökande / Förbiflygande (#RRGGBB):",
+              (var_nvi_soc, var_nvi_fodo, var_nvi_forbi))
+    color_row(1, "ART – Socialt / Födosökande / Förbiflygande (#RRGGBB):",
+              (var_art_soc, var_art_fodo, var_art_forbi))
+
+    # Rozciąganie kolumn
+    for c in range(10):
+        lf_colors.columnconfigure(c, weight=0)
+    lf_colors.columnconfigure(9, weight=1)
+
+    # ---------- KNAPPAR ----------
+    btns = ttk.Frame(main); btns.pack(fill="x", pady=(12,0))
+    ok_pressed = {"done": False}
+    settings = {}
+
+    def on_cancel():
+        root.destroy()
+        sys.exit(0)
+
+    def on_ok():
+        files = list(files_list.get(0, tk.END))
+        if not files:
+            messagebox.showwarning("GUI", "Välj minst en indatafil.")
+            return
+
+        outdir = var_outdir.get().strip()
+        if not outdir:
+            messagebox.showwarning("GUI", "Välj mapp där 'Results/' ska skapas.")
+            return
+
+        basename = var_basename.get().strip() or "sammanstallning_fladdermus"
+
+        # Tider
+        do_plots = bool(var_do_plots.get())
+        tmode = var_time_mode.get()
+        tstart = var_tstart.get().strip()
+        tend   = var_tend.get().strip()
+        custom_range = None
+        if do_plots and tmode == "manual":
+            try:
+                pd.to_datetime(tstart, format="%H:%M")
+                pd.to_datetime(tend,   format="%H:%M")
+            except Exception:
+                messagebox.showerror("GUI", "Felaktigt tidsformat. Använd HH:MM (t.ex. 22:15).")
+                return
+            custom_range = (tstart, tend)
+
+        # Färger – tom = standard (None)
+        nvi_soc   = _validate_hex(var_nvi_soc.get())
+        nvi_fodo  = _validate_hex(var_nvi_fodo.get())
+        nvi_forbi = _validate_hex(var_nvi_forbi.get())
+        art_soc   = _validate_hex(var_art_soc.get())
+        art_fodo  = _validate_hex(var_art_fodo.get())
+        art_forbi = _validate_hex(var_art_forbi.get())
+
+        diag_base = var_diagdir.get().strip() or None
+
+        settings.update({
+            "input_files": files,
+            "base_dir": outdir,
+            "base_name": basename,
+            "do_plots": do_plots,
+            "custom_time_range": custom_range,   # None = auto
+            "diagram_base": diag_base,
+            "colors": {
+                "NVI": {"Socialt": nvi_soc, "Födosökande": nvi_fodo, "Förbiflygande": nvi_forbi},
+                "ART": {"Socialt": art_soc, "Födosökande": art_fodo, "Förbiflygande": art_forbi},
+            }
+        })
+        ok_pressed["done"] = True
+        root.destroy()
+
+    ttk.Button(btns, text="Avbryt", command=on_cancel).pack(side="right")
+    ttk.Button(btns, text="Starta", command=on_ok).pack(side="right", padx=(0,8))
+
+    toggle_time_entries()
+    root.mainloop()
+
+    if not ok_pressed["done"]:
+        sys.exit(0)
+    return settings
+
+# ================== START: hämta inställningar via GUI ==================
+settings = gui_collect_settings()
+
+# Värden från GUI
+input_files = settings["input_files"]
+base_dir    = settings["base_dir"]
+base_name   = settings["base_name"]
+
+# --- Skapa mappen Results och vägar till Excel-utdata ---
 results_dir = os.path.join(base_dir, "Results")
 os.makedirs(results_dir, exist_ok=True)
 
 out_path_nvi = os.path.join(results_dir, f"{base_name}_NVI.xlsx")
 out_path_art = os.path.join(results_dir, f"{base_name}_ART.xlsx")
 
+# --- Eventuell färg-override från GUI (endast om angiven) ---
+if settings["colors"]["NVI"]["Socialt"]:       HEX_NVI_SOC   = settings["colors"]["NVI"]["Socialt"]
+if settings["colors"]["NVI"]["Födosökande"]:   HEX_NVI_FODO  = settings["colors"]["NVI"]["Födosökande"]
+if settings["colors"]["NVI"]["Förbiflygande"]: HEX_NVI_FORBI = settings["colors"]["NVI"]["Förbiflygande"]
+if settings["colors"]["ART"]["Socialt"]:       HEX_ART_SOC   = settings["colors"]["ART"]["Socialt"]
+if settings["colors"]["ART"]["Födosökande"]:   HEX_ART_FODO  = settings["colors"]["ART"]["Födosökande"]
+if settings["colors"]["ART"]["Förbiflygande"]: HEX_ART_FORBI = settings["colors"]["ART"]["Förbiflygande"]
+
+# --- (ÅTER)BYGG fyllningsscheman för tabellen med ev. nya HEX ---
+SCHEME_NVI_TABLE = {
+    "Socialt":       fill_from_hex(HEX_NVI_SOC),
+    "Födosökande":   fill_from_hex(HEX_NVI_FODO),
+    "Fodosökande":   fill_from_hex(HEX_NVI_FODO),
+    "Förbiflygande": fill_from_hex(HEX_TABLE_FORBI),
+}
+SCHEME_ART_TABLE = {
+    "Socialt":       fill_from_hex(HEX_ART_SOC),
+    "Födosökande":   fill_from_hex(HEX_ART_FODO),
+    "Fodosökande":   fill_from_hex(HEX_ART_FODO),
+    "Förbiflygande": fill_from_hex(HEX_TABLE_FORBI),
+}
+
 # ================== STEG 1A: Läs och bygg tabellen ”Översikt” ==================
 used_sheet_names = set()
-sheets_to_write = []        # [(bladnamn, df)]
-counts_per_file = {}        # {blad: {(latin, typ): antal}}
-total_ljud_per_file = {}    # {blad: totalt antal rader}
-nights_per_file = {}        # {blad: antal nätter}
-all_species_latin = set()   # mängd latinska artnamn för sortering
+sheets_to_write = []
+counts_per_file = {}
+total_ljud_per_file = {}
+nights_per_file = {}
+all_species_latin = set()
 
 for path in input_files:
     sheet_name = safe_sheet_name(path, used_sheet_names)
@@ -329,27 +559,23 @@ for latin in species_sorted_latin:
             row[col] = ("" if val == 0 else int(val))
         rows_data.append(row)
 
-# Summeringsrader (i denna ordning):
-# 1) Fladdermusregistreringar (utan Noise)
+# Summeringsrader
 sum_row = {"Art": "", "Beteendetyper": "Fladdermusregistreringar"}
 for col in file_cols:
     sum_row[col] = int(sum(counts_per_file.get(col, {}).values()))
 rows_data.append(sum_row)
 
-# 2) Antal nätter
 nights_row = {"Art": "", "Beteendetyper": "Antal nätter"}
 for col in file_cols:
     n = nights_per_file.get(col)
     nights_row[col] = ("" if not n else int(n))
 rows_data.append(nights_row)
 
-# 3) Antal registreringar / natt (formel sätts i Excel)
 per_night_row = {"Art": "", "Beteendetyper": "Antal registreringar / natt"}
 for col in file_cols:
     per_night_row[col] = ""
 rows_data.append(per_night_row)
 
-# 4) Total antal ljud (inkl. Noise)
 tot_row = {"Art": "", "Beteendetyper": "Total antal ljud"}
 for col in file_cols:
     tot_row[col] = int(total_ljud_per_file.get(col, 0))
@@ -415,7 +641,7 @@ def format_overview(path_out, scheme_fills, num_species_rows, file_cols_list):
             ws.cell(row=current, column=1).alignment = Alignment(vertical="center", wrap_text=True)
             current = end + 1
 
-    # Färglägg rader efter beteendetyp (kolumn B); färg läggs även på icke-tomma värdeceller
+    # Färglägg rader efter beteendetyp
     for r in range(data_start, sum_row_idx):
         typ = ws.cell(row=r, column=2).value
         fill = scheme_fills.get(typ)
@@ -432,7 +658,7 @@ def format_overview(path_out, scheme_fills, num_species_rows, file_cols_list):
             ws.cell(row=r, column=c).font = Font(bold=True)
             ws.cell(row=r, column=c).alignment = Alignment(vertical="center")
 
-    # Formler: ”Antal registreringar / natt” (en decimal)
+    # Formel: ”Antal registreringar / natt”
     for col_idx in range(3, max_col + 1):
         col_letter = get_column_letter(col_idx)
         formula = f'=IFERROR({col_letter}{sum_row_idx}/{col_letter}{nights_row_idx},"")'
@@ -440,7 +666,7 @@ def format_overview(path_out, scheme_fills, num_species_rows, file_cols_list):
         cell.value = formula
         cell.number_format = "0.0"
 
-    # Tjock horisontell linje över varje artblock (var 3:e rad)
+    # Tjock horisontell linje över varje artblock
     for i in range(num_species_rows):
         top_row = data_start + i * 3
         for c in range(1, max_col + 1):
@@ -449,7 +675,7 @@ def format_overview(path_out, scheme_fills, num_species_rows, file_cols_list):
                 left=old.left, right=old.right, top=BORDER_MEDIUM, bottom=old.bottom
             )
 
-    # Tjock linje ovanför första summeringen och ram längst ned
+    # Tjock linje ovanför summeringar + ram
     for c in range(1, max_col + 1):
         old = ws.cell(row=sum_row_idx, column=c).border
         ws.cell(row=sum_row_idx, column=c).border = Border(
@@ -632,6 +858,7 @@ def generate_bat_diagrams(input_files_list, diagrams_root, custom_time_range):
                     continue
                 min_dt = round_down_15(min(dt_from_int))
                 max_dt = round_up_15(max(dt_from_int))
+
             else:
                 min_dt = round_down_15(min(dt_series))
                 max_dt = round_up_15(max(dt_series))
@@ -663,7 +890,7 @@ def generate_bat_diagrams(input_files_list, diagrams_root, custom_time_range):
 
         plt.figure(figsize=(12, 6))
         ax_all = plt.gca()
-        pivot_line.plot(ax=ax_all, marker='o')  # standardpalett för flera serier
+        pivot_line.plot(ax=ax_all, marker='o')
         ax_all.set_xlabel("Tid (15-minutersintervall)")
         ax_all.set_ylabel("Antal ljudfiler")
         ax_all.set_title(f"Fladdermusobservationer – alla arter, antal observerade beteenden: {total_obs}")
@@ -747,47 +974,12 @@ def generate_bat_diagrams(input_files_list, diagrams_root, custom_time_range):
         print(f"Linjediagram sparade i mappen: {output_dir_lines}")
         print(f"Tidsintervall: {all_intervals[0]} – {all_intervals[-1]}")
 
-# ---- Dialog för frivillig diagramgenerering ----
-try:
-    if messagebox.askyesno(
-        "Generera fladdermusdiagram",
-        "Vill du generera fladdermusdiagram nu?\n\n"
-        "Du väljer mål-mapp i nästa steg."
-    ):
-        # Förvald katalog: Results (om finns) annars mappen för första indatafilen
-        default_dir = results_dir if os.path.isdir(results_dir) else os.path.dirname(input_files[0])
-        chosen_base = filedialog.askdirectory(
-            title="Välj mapp där resultaten ska sparas",
-            initialdir=default_dir
-        )
-        if chosen_base:
-            diagrams_root = os.path.join(chosen_base, "diagramer")
-        else:
-            diagrams_root = os.path.join(default_dir, "diagramer")
+# ================== Kör diagram om valt i GUI ==================
+if settings["do_plots"]:
+    diagrams_base = settings["diagram_base"] or results_dir
+    diagrams_root = os.path.join(diagrams_base, "diagramer")
+    os.makedirs(diagrams_root, exist_ok=True)
+    print(f"Resultat kommer att sparas i: {diagrams_root}")
 
-        os.makedirs(diagrams_root, exist_ok=True)
-        print(f"Resultat kommer att sparas i: {diagrams_root}")
-
-        mode = messagebox.askquestion(
-            "Välj X-axelns intervall",
-            "Vill du basera X-axeln på inspelningstid (auto)?\n\n"
-            "Välj 'Ja' för automatisk start/slut (utifrån ljudfiler).\n"
-            "Välj 'Nej' för att ange eget tidsintervall."
-        )
-        if mode == "yes":
-            custom_time_range = None
-        else:
-            while True:
-                start = simpledialog.askstring("Starttid", "Ange starttid (t.ex. 22:15):")
-                end = simpledialog.askstring("Sluttid", "Ange sluttid (t.ex. 02:45):")
-                try:
-                    pd.to_datetime(start, format="%H:%M")
-                    pd.to_datetime(end, format="%H:%M")
-                    break
-                except Exception:
-                    messagebox.showerror("Fel", "Felaktigt tidsformat. Ange t.ex. 22:15 eller 02:45.")
-            custom_time_range = (start, end)
-
-        generate_bat_diagrams(input_files, diagrams_root, custom_time_range)
-except Exception as e:
-    print(f"Kunde inte visa dialogen eller köra diagramgenerering: {e}")
+    custom_time_range = settings["custom_time_range"]  # None → auto
+    generate_bat_diagrams(input_files, diagrams_root, custom_time_range)
