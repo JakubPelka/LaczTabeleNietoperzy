@@ -17,22 +17,57 @@ from openpyxl.utils import get_column_letter
 
 # ================== Gränssnitt (UI) ==================
 TITLE_OPEN = "Välj en eller flera Excel-filer (.xlsx, samma struktur)"
-TITLE_SAVE = "Välj var du vill spara sammanställningen"
+TITLE_SAVE = "Välj var du vill spara sammanställningen (ange basnamn)"
 DEFAULT_OUT = "sammanstallning_fladdermus.xlsx"
 
-# ================== Färger / stilar ==================
-COLOR_FORBI = "FFE7E6E6"     # Förbiflygande (ljusgrå)
-COLOR_SOC   = "FFFF0000"     # Socialt (röd)
-COLOR_FODO  = "FFFFC000"     # Födosökande (gul)
-COLOR_HEADER_BG = "FF595959" # Rubrik – bakgrund
-COLOR_HEADER_FG = "FFFFFFFF" # Rubrik – text
+# ================== Färger – JEDNOLITY FORMAT HEX ==================
+# Używamy HEX #RRGGBB wszędzie; do Excela konwertujemy na ARGB ("FF"+RRGGBB).
 
-FILL_FORBI = PatternFill("solid", fgColor=COLOR_FORBI)
-FILL_SOC   = PatternFill("solid", fgColor=COLOR_SOC)
-FILL_FODO  = PatternFill("solid", fgColor=COLOR_FODO)
-FILL_HDR   = PatternFill("solid", fgColor=COLOR_HEADER_BG)
+# Nagłówki
+HEX_HEADER_BG = "#595959"
+HEX_HEADER_FG = "#FFFFFF"
 
+# Tabela: wspólny kolor Förbiflygande (jak w NVI-tabeli)
+HEX_TABLE_FORBI = "#E7E6E6"
+
+# Paleta NVI (wykresy słupkowe)
+HEX_NVI_SOC   = "#FF0000"  # Socialt
+HEX_NVI_FODO  = "#FFC000"  # Födosökande
+HEX_NVI_FORBI = "#A9A9A9"  # Förbiflygande (dla wykresów; tabela ma #E7E6E6)
+
+# Paleta ART (wykresy słupkowe)
+HEX_ART_SOC   = "#EB09D8"  # Socialt
+HEX_ART_FODO  = "#D98FD3"  # Födosökande
+HEX_ART_FORBI = "#ABAAA9"  # Förbiflygande (dla wykresów; tabela ma #E7E6E6)
+
+# Obramowania w Excelu
 BORDER_MEDIUM = Side(style="medium", color="FF000000")
+
+def hex_to_argb(hex_rgb: str) -> str:
+    """Konwertuje '#RRGGBB' -> 'FFRRGGBB' (ARGB) do Excela."""
+    h = hex_rgb.strip().lstrip("#")
+    if len(h) != 6:
+        raise ValueError(f"Nieprawidłowy HEX: {hex_rgb}")
+    return "FF" + h.upper()
+
+def fill_from_hex(hex_rgb: str) -> PatternFill:
+    return PatternFill("solid", fgColor=hex_to_argb(hex_rgb))
+
+FILL_HDR = fill_from_hex(HEX_HEADER_BG)
+
+# Schematy wypełnień tabel: FORBIFLYGANDE zawsze HEX_TABLE_FORBI dla obu
+SCHEME_NVI_TABLE = {
+    "Socialt":       fill_from_hex(HEX_NVI_SOC),
+    "Födosökande":   fill_from_hex(HEX_NVI_FODO),
+    "Fodosökande":   fill_from_hex(HEX_NVI_FODO),  # tolerancja zapisu bez diakrytyków
+    "Förbiflygande": fill_from_hex(HEX_TABLE_FORBI),
+}
+SCHEME_ART_TABLE = {
+    "Socialt":       fill_from_hex(HEX_ART_SOC),
+    "Födosökande":   fill_from_hex(HEX_ART_FODO),
+    "Fodosökande":   fill_from_hex(HEX_ART_FODO),
+    "Förbiflygande": fill_from_hex(HEX_TABLE_FORBI),  # identyczny jak w NVI-tabeli
+}
 
 # ================== Ordbok: Latin → Svenska ==================
 LATIN_TO_SV = {
@@ -64,7 +99,7 @@ SPECIAL_TAIL = {"nyctaloid", "chiroptera"}  # sorteras sist
 
 # ================== Hjälpfunktioner (gemensamma) ==================
 def safe_sheet_name(path: str, used: set) -> str:
-    """Gör ett kalkylbladsnamn kompatibelt med Excel (max 31 tecken, förbjudna tecken)."""
+    """Excel-kompatibelt bladnamn (max 31 tecken, usuwa zabronione znaki)."""
     base = os.path.splitext(os.path.basename(path))[0]
     base = re.sub(r'[:\\\/\?\*\[\]]', '_', base).strip()[:31] or "Ark"
     cand = base; i = 2
@@ -75,7 +110,7 @@ def safe_sheet_name(path: str, used: set) -> str:
     used.add(cand); return cand
 
 def display_label_multiline(latin: str) -> str:
-    """Returnerar 'Svenskt namn,\\nLatinskt namn' eller enbart latinskt namn (t.ex. Nyctaloid/Chiroptera)."""
+    """Zwraca 'Szwedzka nazwa,\\nŁacińska nazwa' lub tylko łacińską (Nyctaloid/Chiroptera)."""
     latin = str(latin).strip()
     sv = LATIN_TO_SV.get(latin, None)
     if sv:
@@ -83,14 +118,14 @@ def display_label_multiline(latin: str) -> str:
     return latin
 
 def format_title(species_latin: str, total_count: int) -> str:
-    """Titel: 'Svenskt namn (Latinskt), antal observerade beteenden: NN' eller bara latinskt namn."""
+    """Tytuł dla wykresów per gatunek."""
     sv = LATIN_TO_SV.get(species_latin)
     if sv:
         return f"{sv} ({species_latin}), antal observerade beteenden: {int(total_count)}"
     return f"{species_latin}, antal observerade beteenden: {int(total_count)}"
 
 def extract_species_and_type(manual_id_value):
-    """Parsning av MANUAL ID till (art, typ: Förbiflygande/Socialt/Födosökande)."""
+    """Parsuje MANUAL ID do listy (gatunek, typ: Förbiflygande/Socialt/Födosökande)."""
     if pd.isna(manual_id_value): return []
     out = []
     for raw in str(manual_id_value).split(","):
@@ -105,7 +140,7 @@ def extract_species_and_type(manual_id_value):
     return out
 
 def open_file(path):
-    """Försök öppna en fil i operativsystemet."""
+    """Próbuje otworzyć plik w systemie."""
     try:
         if sys.platform.startswith("win"): os.startfile(path)
         elif sys.platform == "darwin": subprocess.run(["open", path])
@@ -114,23 +149,15 @@ def open_file(path):
         print(f"Kan inte öppna filen automatiskt: {e}")
 
 def species_sort_key(latin: str):
-    """Sorteringsnyckel: normalt A–Ö, men Nyctaloid/Chiroptera sist."""
+    """Sort A–Ö, ale Nyctaloid/Chiroptera na końcu."""
     return (str(latin).strip().lower() in SPECIAL_TAIL, str(latin).casefold())
 
-def fill_for_type(t):
-    """Välj cellfyllning baserat på beteendetyp."""
-    if t in ("Födosökande", "Fodosökande"): return FILL_FODO
-    if t == "Socialt": return FILL_SOC
-    if t == "Förbiflygande": return FILL_FORBI
-    return None
-
 def safe_filename(s):
-    """Gör ett filnamn säkert för filsystemet."""
+    """Czyści string do bezpiecznej nazwy pliku."""
     return re.sub(r'[\\/:\*\?"<>\|]', '_', str(s))
 
-# --- robust parsning av tider (string, datetime, Excel-float) ---
+# --- Parsowanie czasu (string, datetime, Excel-float) ---
 def _hm_from_any(val):
-    """Returnerar (timme, minut) som ints eller None om ej möjligt."""
     try:
         if val is None or (isinstance(val, float) and pd.isna(val)) or (isinstance(val, str) and val.strip() == ""):
             return None
@@ -153,7 +180,6 @@ def _hm_from_any(val):
         return None
 
 def str_to_dt(time_val):
-    """Bygger ett datetime (med konstgjort datum) från vilkensomhelst tidstyp ovan."""
     hm = _hm_from_any(time_val)
     if hm is None:
         return None
@@ -162,17 +188,14 @@ def str_to_dt(time_val):
     return datetime.strptime(f"{fake_date} {h:02d}:{m:02d}", "%Y-%m-%d %H:%M")
 
 def round_down_15(dt):
-    """Rundar ned ett datetime till närmaste 15-minutersintervall."""
     return dt.replace(minute=(dt.minute // 15) * 15, second=0, microsecond=0)
 
 def round_up_15(dt):
-    """Rundar upp ett datetime till närmaste 15-minutersintervall."""
     if dt.minute % 15 != 0 or dt.second > 0 or dt.microsecond > 0:
         dt = dt + timedelta(minutes=15 - (dt.minute % 15), seconds=-dt.second, microseconds=-dt.microsecond)
     return dt.replace(second=0, microsecond=0)
 
 def interval_to_sortkey(interval):
-    """Gör om 'HH:MM' till datetime (med konstgjort datum) för sortering/jämförelse."""
     try:
         t = pd.to_datetime(str(interval), format="%H:%M", errors="coerce")
         if pd.isna(t):
@@ -184,7 +207,6 @@ def interval_to_sortkey(interval):
         return None
 
 def detect_column(df, candidates):
-    """Hittar första kolumn vars namn (case-insensitivt) matchar en av kandidaterna."""
     lowmap = {str(c).strip().lower(): c for c in df.columns}
     for k in candidates:
         if k in lowmap:
@@ -192,11 +214,7 @@ def detect_column(df, candidates):
     return None
 
 def count_nights(df):
-    """
-    Räknar unika fältnätter i en fil:
-    - använder DATE/Datum och TIME/Tid (om tid < 12 → föregående natt).
-    - om datum saknas → returnerar None.
-    """
+    """Liczy unikalne noce terenowe w pliku."""
     date_col = detect_column(df, ["date", "datum"])
     if not date_col:
         return None
@@ -214,7 +232,7 @@ def count_nights(df):
     nights = pd.Series(night_key).dropna().nunique()
     return int(nights) if nights else None
 
-# ================== STEG 1: Välj filer och spara sammanställning ==================
+# ================== STEG 1: Wybór plików i bazowej nazwy ==================
 root = tk.Tk(); root.withdraw()
 
 input_files = filedialog.askopenfilenames(
@@ -228,28 +246,37 @@ if not input_files:
     print("Endast .xlsx stöds. Avslutar.")
     sys.exit(0)
 
-out_path = filedialog.asksaveasfilename(
+out_base = filedialog.asksaveasfilename(
     title=TITLE_SAVE, defaultextension=".xlsx",
     initialfile=DEFAULT_OUT, filetypes=[("Excel-fil (.xlsx)", "*.xlsx")]
 )
-if not out_path:
+if not out_base:
     print("Ingen plats vald. Avslutar.")
     sys.exit(0)
 
-# ---- Insamling av data till bladet ”Översikt” ----
+# --- Nowe: twórz folder Results i zapisuj w nim oba pliki ---
+base_dir  = os.path.dirname(out_base)
+base_name = os.path.splitext(os.path.basename(out_base))[0]
+results_dir = os.path.join(base_dir, "Results")
+os.makedirs(results_dir, exist_ok=True)
+
+out_path_nvi = os.path.join(results_dir, f"{base_name}_NVI.xlsx")
+out_path_art = os.path.join(results_dir, f"{base_name}_ART.xlsx")
+
+# ================== STEG 1A: Czytanie i budowa „Översikt” ==================
 used_sheet_names = set()
-sheets_to_write = []        # [(bladnamn, df)]
-counts_per_file = {}        # {bladnamn: {(latin, typ): antal}}
-total_ljud_per_file = {}    # {bladnamn: total rader}
-nights_per_file = {}        # {bladnamn: antal nätter}
+sheets_to_write = []
+counts_per_file = {}
+total_ljud_per_file = {}
+nights_per_file = {}
 all_species_latin = set()
 
 for path in input_files:
     sheet_name = safe_sheet_name(path, used_sheet_names)
     df = pd.read_excel(path, sheet_name=0, engine="openpyxl")
     sheets_to_write.append((sheet_name, df))
-    total_ljud_per_file[sheet_name] = int(len(df))  # inkl. NOISE
-    nights_per_file[sheet_name] = count_nights(df)  # kan vara None
+    total_ljud_per_file[sheet_name] = int(len(df))
+    nights_per_file[sheet_name] = count_nights(df)
 
     if "MANUAL ID" not in df.columns:
         counts_per_file[sheet_name] = {}
@@ -271,7 +298,6 @@ for path in input_files:
     grp = long.groupby(["ArtLatin", "Beteendetyper"]).size()
     counts_per_file[sheet_name] = {(sp, typ): int(n) for (sp, typ), n in grp.items()}
 
-# ---- Bygg DataFrame ”Översikt” ----
 type_order_overview = ["Socialt", "Födosökande", "Förbiflygande"]
 species_sorted_latin = sorted(all_species_latin, key=species_sort_key)
 file_cols = list(counts_per_file.keys())
@@ -286,169 +312,181 @@ for latin in species_sorted_latin:
             row[col] = ("" if val == 0 else int(val))
         rows_data.append(row)
 
-# Summering 1: Fladdermusregistreringar
+# Podsumowania
 sum_row = {"Art": "", "Beteendetyper": "Fladdermusregistreringar"}
 for col in file_cols:
     sum_row[col] = int(sum(counts_per_file.get(col, {}).values()))
 rows_data.append(sum_row)
 
-# Summering 2: Antal nätter
 nights_row = {"Art": "", "Beteendetyper": "Antal nätter"}
 for col in file_cols:
     n = nights_per_file.get(col)
     nights_row[col] = ("" if not n else int(n))
 rows_data.append(nights_row)
 
-# Summering 3: Antal registreringar / natt (formel i Excel)
 per_night_row = {"Art": "", "Beteendetyper": "Antal registreringar / natt"}
 for col in file_cols:
     per_night_row[col] = ""
 rows_data.append(per_night_row)
 
-# Summering 4: Total antal ljud (inkl. NOISE)
 tot_row = {"Art": "", "Beteendetyper": "Total antal ljud"}
 for col in file_cols:
     tot_row[col] = int(total_ljud_per_file.get(col, 0))
 rows_data.append(tot_row)
 
 overview_df = pd.DataFrame(rows_data, columns=["Art", "Beteendetyper"] + file_cols)
+num_species = len(species_sorted_latin)
 
-# ---- Skriv till .xlsx ----
-with pd.ExcelWriter(out_path, engine="openpyxl") as writer:
-    overview_df.to_excel(writer, sheet_name="Översikt", index=False)
-    for sheet_name, df_orig in sheets_to_write:
-        df_orig.to_excel(writer, sheet_name=sheet_name, index=False)
+# ================== STEG 1B: Zapis dwóch Exceli i formatowanie ==================
+def write_overview_to(path_out):
+    with pd.ExcelWriter(path_out, engine="openpyxl") as writer:
+        overview_df.to_excel(writer, sheet_name="Översikt", index=False)
+        for sheet_name, df_orig in sheets_to_write:
+            df_orig.to_excel(writer, sheet_name=sheet_name, index=False)
 
-# ---- Formatering i Excel ----
-wb = load_workbook(out_path)
-ws = wb["Översikt"]
+def format_overview(path_out, scheme_fills, num_species_rows, file_cols_list):
+    wb = load_workbook(path_out)
+    ws = wb["Översikt"]
 
-max_row = ws.max_row
-max_col = ws.max_column
-header_row = 1
-data_start = header_row + 1
+    max_row = ws.max_row
+    max_col = ws.max_column
+    header_row = 1
+    data_start = header_row + 1
 
-num_species_rows = len(species_sorted_latin) * 3
-sum_row_idx      = data_start + num_species_rows            # Fladdermusregistreringar
-nights_row_idx   = sum_row_idx + 1                          # Antal nätter
-pernight_row_idx = nights_row_idx + 1                       # Antal registreringar / natt
-total_row_idx    = pernight_row_idx + 1                     # Total antal ljud
+    num_species_rows_total = num_species_rows * 3
+    sum_row_idx      = data_start + num_species_rows_total
+    nights_row_idx   = sum_row_idx + 1
+    pernight_row_idx = nights_row_idx + 1
+    total_row_idx    = pernight_row_idx + 1
 
-# Rubrikrad
-for c in range(1, max_col + 1):
-    cell = ws.cell(row=header_row, column=c)
-    cell.fill = FILL_HDR
-    cell.font = Font(color=COLOR_HEADER_FG, bold=True)
-    cell.alignment = Alignment(vertical="center", horizontal="center")
-ws.row_dimensions[header_row].height = 18
-
-# Kolumnbredder
-ws.column_dimensions["A"].width = 44
-ws.column_dimensions["B"].width = 24
-for idx, col_name in enumerate(file_cols, start=3):
-    header_text = str(col_name)
-    width = max(12, min(50, int(len(header_text) * 1.1)))
-    ws.column_dimensions[get_column_letter(idx)].width = width
-
-# Sammanfoga + radbryt kolumn A per artblock
-if num_species_rows > 0:
-    current = data_start
-    merge_end_limit = sum_row_idx - 1
-    while current <= merge_end_limit:
-        art_val = ws[f"A{current}"].value
-        if not art_val:
-            current += 1
-            continue
-        end = current
-        while end + 1 <= merge_end_limit and ws[f"A{end+1}"].value == art_val:
-            end += 1
-        if end > current:
-            ws.merge_cells(start_row=current, start_column=1, end_row=end, end_column=1)
-        ws.cell(row=current, column=1).alignment = Alignment(vertical="center", wrap_text=True)
-        current = end + 1
-
-# Färgläggning efter kategori (kolumn B)
-for r in range(data_start, sum_row_idx):
-    typ = ws.cell(row=r, column=2).value
-    fill = fill_for_type(typ)
-    if fill:
-        ws.cell(row=r, column=2).fill = fill
-        for c in range(3, max_col + 1):
-            val = ws.cell(row=r, column=c).value
-            if val not in (None, "", 0):
-                ws.cell(row=r, column=c).fill = fill
-
-# Fetstil för summeringsrader
-for r in (sum_row_idx, nights_row_idx, pernight_row_idx, total_row_idx):
+    # Nagłówek
     for c in range(1, max_col + 1):
-        ws.cell(row=r, column=c).font = Font(bold=True)
-        ws.cell(row=r, column=c).alignment = Alignment(vertical="center")
+        cell = ws.cell(row=header_row, column=c)
+        cell.fill = FILL_HDR
+        cell.font = Font(color=hex_to_argb(HEX_HEADER_FG), bold=True)
+        cell.alignment = Alignment(vertical="center", horizontal="center")
+    ws.row_dimensions[header_row].height = 18
 
-# Sätt Excel-formler i raden "Antal registreringar / natt"
-for col_idx in range(3, max_col + 1):
-    col_letter = get_column_letter(col_idx)
-    formula = f'=IFERROR({col_letter}{sum_row_idx}/{col_letter}{nights_row_idx},"")'
-    cell = ws.cell(row=pernight_row_idx, column=col_idx)
-    cell.value = formula
-    cell.number_format = "0.0"
+    # Szerokości kolumn
+    ws.column_dimensions["A"].width = 44
+    ws.column_dimensions["B"].width = 24
+    for idx, col_name in enumerate(file_cols_list, start=3):
+        header_text = str(col_name)
+        width = max(12, min(50, int(len(header_text) * 1.1)))
+        ws.column_dimensions[get_column_letter(idx)].width = width
 
-# Tjocka horisontella linjer per artblock
-for i in range(len(species_sorted_latin)):
-    top_row = data_start + i * 3
+    # Scalanie + zawijanie nazwy gatunku
+    if num_species_rows_total > 0:
+        current = data_start
+        merge_end_limit = sum_row_idx - 1
+        while current <= merge_end_limit:
+            art_val = ws[f"A{current}"].value
+            if not art_val:
+                current += 1
+                continue
+            end = current
+            while end + 1 <= merge_end_limit and ws[f"A{end+1}"].value == art_val:
+                end += 1
+            if end > current:
+                ws.merge_cells(start_row=current, start_column=1, end_row=end, end_column=1)
+            ws.cell(row=current, column=1).alignment = Alignment(vertical="center", wrap_text=True)
+            current = end + 1
+
+    # Kolory wierszy wg typu
+    for r in range(data_start, sum_row_idx):
+        typ = ws.cell(row=r, column=2).value
+        fill = scheme_fills.get(typ)
+        if fill:
+            ws.cell(row=r, column=2).fill = fill
+            for c in range(3, max_col + 1):
+                val = ws.cell(row=r, column=c).value
+                if val not in (None, "", 0):
+                    ws.cell(row=r, column=c).fill = fill
+
+    # Pogrubienia dla sum
+    for r in (sum_row_idx, nights_row_idx, pernight_row_idx, total_row_idx):
+        for c in range(1, max_col + 1):
+            ws.cell(row=r, column=c).font = Font(bold=True)
+            ws.cell(row=r, column=c).alignment = Alignment(vertical="center")
+
+    # Formuły "Antal registreringar / natt"
+    for col_idx in range(3, max_col + 1):
+        col_letter = get_column_letter(col_idx)
+        formula = f'=IFERROR({col_letter}{sum_row_idx}/{col_letter}{nights_row_idx},"")'
+        cell = ws.cell(row=pernight_row_idx, column=col_idx)
+        cell.value = formula
+        cell.number_format = "0.0"
+
+    # Grube linie poziome
+    for i in range(num_species_rows):
+        top_row = data_start + i * 3
+        for c in range(1, max_col + 1):
+            old = ws.cell(row=top_row, column=c).border
+            ws.cell(row=top_row, column=c).border = Border(
+                left=old.left, right=old.right, top=BORDER_MEDIUM, bottom=old.bottom
+            )
+
+    # Grube linie nad sumami i na dole
     for c in range(1, max_col + 1):
-        old = ws.cell(row=top_row, column=c).border
-        ws.cell(row=top_row, column=c).border = Border(
+        old = ws.cell(row=sum_row_idx, column=c).border
+        ws.cell(row=sum_row_idx, column=c).border = Border(
             left=old.left, right=old.right, top=BORDER_MEDIUM, bottom=old.bottom
         )
-
-# Tjock linje ovanför första summeringsraden och längst ned under sista
-for c in range(1, max_col + 1):
-    old = ws.cell(row=sum_row_idx, column=c).border
-    ws.cell(row=sum_row_idx, column=c).border = Border(
-        left=old.left, right=old.right, top=BORDER_MEDIUM, bottom=old.bottom
-    )
-    old = ws.cell(row=total_row_idx, column=c).border
-    ws.cell(row=total_row_idx, column=c).border = Border(
-        left=old.left, right=BORDER_MEDIUM, top=old.top, bottom=BORDER_MEDIUM
-    )
-
-# Tjocka vertikala linjer
-for c in range(3, max_col + 1):
-    for r in range(header_row, max_row + 1):
-        old = ws.cell(row=r, column=c).border
-        ws.cell(row=r, column=c).border = Border(
-            left=BORDER_MEDIUM, right=old.right, top=old.top, bottom=old.bottom
+        old = ws.cell(row=total_row_idx, column=c).border
+        ws.cell(row=total_row_idx, column=c).border = Border(
+            left=old.left, right=BORDER_MEDIUM, top=old.top, bottom=BORDER_MEDIUM
         )
-for r in range(header_row, max_row + 1):
-    oldA = ws.cell(row=r, column=1).border
-    ws.cell(row=r, column=1).border = Border(
-        left=BORDER_MEDIUM, right=oldA.right, top=oldA.top, bottom=oldA.bottom
-    )
-    oldB = ws.cell(row=r, column=2).border
-    ws.cell(row=r, column=2).border = Border(
-        left=BORDER_MEDIUM, right=oldB.right, top=oldB.top, bottom=oldB.bottom
-    )
-    oldR = ws.cell(row=r, column=max_col).border
-    ws.cell(row=r, column=max_col).border = Border(
-        left=oldR.left, right=BORDER_MEDIUM, top=oldR.top, bottom=oldR.bottom
-    )
 
-wb.save(out_path)
-wb.close()
+    # Grube linie pionowe
+    for c in range(3, max_col + 1):
+        for r in range(header_row, max_row + 1):
+            old = ws.cell(row=r, column=c).border
+            ws.cell(row=r, column=c).border = Border(
+                left=BORDER_MEDIUM, right=old.right, top=old.top, bottom=old.bottom
+            )
+    for r in range(header_row, max_row + 1):
+        oldA = ws.cell(row=r, column=1).border
+        ws.cell(row=r, column=1).border = Border(
+            left=BORDER_MEDIUM, right=oldA.right, top=oldA.top, bottom=oldA.bottom
+        )
+        oldB = ws.cell(row=r, column=2).border
+        ws.cell(row=r, column=2).border = Border(
+            left=BORDER_MEDIUM, right=oldB.right, top=oldB.top, bottom=oldB.bottom
+        )
+        oldR = ws.cell(row=r, column=max_col).border
+        ws.cell(row=r, column=max_col).border = Border(
+            left=oldR.left, right=BORDER_MEDIUM, top=oldR.top, bottom=oldR.bottom
+        )
 
-open_file(out_path)
-print(f"Klar! Sparad fil: {out_path}")
+    wb.save(path_out)
+    wb.close()
 
-# ================== STEG 2: (valfritt) Skapa fladdermusdiagram ==================
+# Zapis i format NVI (tabela)
+write_overview_to(out_path_nvi)
+format_overview(out_path_nvi, SCHEME_NVI_TABLE, num_species, file_cols)
+print(f"Klar! Sparad fil (NVI): {out_path_nvi}")
+
+# Zapis i format ART (tabela)
+write_overview_to(out_path_art)
+format_overview(out_path_art, SCHEME_ART_TABLE, num_species, file_cols)
+print(f"Klar! Sparad fil (ART): {out_path_art}")
+
+# Otwórz dla kontroli
+open_file(out_path_nvi)
+open_file(out_path_art)
+
+# ================== STEG 2: (valfritt) Skapa fladdermusdiagram – GLOBAL Y ==================
+def _hm_from_any_for_plot(val):  # alias, by nie mylić z główną
+    return _hm_from_any(val)
+
 def _compute_file_ymax(input_file, custom_time_range):
-    """Beräknar max staplad topp (per 15-min intervall) för valfri fil – används för global Y-skala."""
+    """Maks. suma stosów w 15-min slotach dla danej filii – do globalnej osi Y."""
     try:
         df = pd.read_excel(input_file)
         df["species_type_list"] = df["MANUAL ID"].map(extract_species_and_type)
 
-        # Intervall från TIME → 'HH:MM' avrundat nedåt till 15 min
         def time_to_interval(val):
-            hm = _hm_from_any(val)
+            hm = _hm_from_any_for_plot(val)
             if hm is None:
                 return ""
             h, m = hm
@@ -464,7 +502,6 @@ def _compute_file_ymax(input_file, custom_time_range):
         df_long = df_long[df_long["species"].astype(str).str.strip().str.lower() != "noise"]
         df_long = df_long[df_long["species"].astype(str).str.strip() != ""]
 
-        # Tidsintervall (global logik måste spegla det som används vid plottning)
         if custom_time_range:
             min_dt = str_to_dt(custom_time_range[0] + ":00")
             max_dt = str_to_dt(custom_time_range[1] + ":00")
@@ -493,7 +530,6 @@ def _compute_file_ymax(input_file, custom_time_range):
             t += timedelta(minutes=15)
         all_intervals = list(dict.fromkeys(all_intervals))
 
-        # Staplad max per art
         agg = df_long.groupby(["interval", "species", "obs_type"]).size().reset_index(name="antal")
         agg["interval"] = pd.Categorical(agg["interval"], categories=all_intervals, ordered=True)
         type_order = ["Socialt", "Födosökande", "Förbiflygande"]
@@ -514,18 +550,13 @@ def _compute_file_ymax(input_file, custom_time_range):
         return 0
 
 def generate_bat_diagrams(input_files_list, diagrams_root, custom_time_range):
-    """
-    Skapar diagram (linjer + staplar) för en lista av filer.
-    Nu med GLOBAL Y-skala (samma för alla filer).
-    """
-    # ---- Global Y-skala: ta max från alla filer (i samma tidslogik som plottning) ----
+    # Globalny sufit Y
     global_y_max = 0
     for p in input_files_list:
         global_y_max = max(global_y_max, _compute_file_ymax(p, custom_time_range))
     y_lim_global = max(1, math.ceil(global_y_max * 1.05))
     print(f"Global gemensam Y-max (linje + stapel) för alla filer: {y_lim_global}")
 
-    # ---- Generering av diagram per fil (alla använder y_lim_global) ----
     for input_file in input_files_list:
         print(f"\nBearbetar: {os.path.basename(input_file)}")
 
@@ -534,18 +565,16 @@ def generate_bat_diagrams(input_files_list, diagrams_root, custom_time_range):
         output_dir_stacks = os.path.join(diagrams_root, f"{stem}_stapeldiagram")
         os.makedirs(output_dir_lines, exist_ok=True)
 
-        # --- Läs in och förbered ---
         df = pd.read_excel(input_file)
         df["species_type_list"] = df["MANUAL ID"].map(extract_species_and_type)
 
         def time_to_interval(val):
-            hm = _hm_from_any(val)
+            hm = _hm_from_any_for_plot(val)
             if hm is None:
                 return ""
             h, m = hm
             minutes = int((m // 15) * 15)
             return f"{h:02d}:{minutes:02d}"
-
         df["interval"] = df["TIME"].map(time_to_interval)
 
         df_long = df.explode("species_type_list")
@@ -557,7 +586,6 @@ def generate_bat_diagrams(input_files_list, diagrams_root, custom_time_range):
         df_long = df_long[df_long["species"].astype(str).str.strip().str.lower() != "noise"]
         df_long = df_long[df_long["species"].astype(str).str.strip() != ""]
 
-        # Tidsintervall (auto eller manuellt)
         if custom_time_range:
             min_dt = str_to_dt(custom_time_range[0] + ":00")
             max_dt = str_to_dt(custom_time_range[1] + ":00")
@@ -577,11 +605,12 @@ def generate_bat_diagrams(input_files_list, diagrams_root, custom_time_range):
                     continue
                 min_dt = round_down_15(min(dt_from_int))
                 max_dt = round_up_15(max(dt_from_int))
+
             else:
                 min_dt = round_down_15(min(dt_series))
                 max_dt = round_up_15(max(dt_series))
 
-        # Lista med alla 15-minutersintervall
+        # Lista 15-min slotów
         all_intervals = []
         t = min_dt
         while t <= max_dt:
@@ -589,12 +618,17 @@ def generate_bat_diagrams(input_files_list, diagrams_root, custom_time_range):
             t += timedelta(minutes=15)
         all_intervals = list(dict.fromkeys(all_intervals))
 
-        # Aggregering för diagram
+        # Agregacja
         agg = df_long.groupby(["interval", "species", "obs_type"]).size().reset_index(name="antal")
         agg["interval"] = pd.Categorical(agg["interval"], categories=all_intervals, ordered=True)
         species_list = sorted(df_long["species"].unique())
+        type_order = ["Socialt", "Födosökande", "Förbiflygande"]
 
-        # LINJEDIAGRAM (samlat)
+        # ================== WYKRESY – UJEDNOLICONE KOLORY (HEX) ==================
+        colors_art = [HEX_ART_SOC, HEX_ART_FODO, HEX_ART_FORBI]
+        colors_nvi = [HEX_NVI_SOC, HEX_NVI_FODO, HEX_NVI_FORBI]
+
+        # LINIE – zbiorczy
         agg_line = df_long.groupby(["interval", "species"]).size().reset_index(name="antal")
         agg_line["interval"] = pd.Categorical(agg_line["interval"], categories=all_intervals, ordered=True)
         pivot_line = agg_line.pivot(index="interval", columns="species", values="antal").fillna(0)
@@ -603,7 +637,7 @@ def generate_bat_diagrams(input_files_list, diagrams_root, custom_time_range):
 
         plt.figure(figsize=(12, 6))
         ax_all = plt.gca()
-        pivot_line.plot(ax=ax_all, marker='o')
+        pivot_line.plot(ax=ax_all, marker='o')  # domyślna paleta – wiele gatunków
         ax_all.set_xlabel("Tid (15-minutersintervall)")
         ax_all.set_ylabel("Antal ljudfiler")
         ax_all.set_title(f"Fladdermusobservationer – alla arter, antal observerade beteenden: {total_obs}")
@@ -617,7 +651,7 @@ def generate_bat_diagrams(input_files_list, diagrams_root, custom_time_range):
         plt.savefig(os.path.join(output_dir_lines, "alla_arter.png"))
         plt.close()
 
-        # LINJEDIAGRAM (per art)
+        # LINIE – per gatunek
         for species in species_list:
             total_sp = int(pivot_line[species].sum())
             plt.figure(figsize=(10, 4))
@@ -635,12 +669,9 @@ def generate_bat_diagrams(input_files_list, diagrams_root, custom_time_range):
             plt.savefig(os.path.join(output_dir_lines, f"{safe_filename(species)}.png"))
             plt.close()
 
-        # STAPELDIAGRAM – ART
+        # SŁUPKI – ART
         output_dir_stacks_art = output_dir_stacks + "_ART"
         os.makedirs(output_dir_stacks_art, exist_ok=True)
-        color_art = ["#eb09d8", "#d98fd3", "#abaaa9"]  # Socialt, Födosökande, Förbiflygande
-        type_order = ["Socialt", "Födosökande", "Förbiflygande"]
-
         for species in species_list:
             plot_data = (
                 agg[agg["species"] == species]
@@ -649,7 +680,7 @@ def generate_bat_diagrams(input_files_list, diagrams_root, custom_time_range):
                 .reindex(all_intervals, fill_value=0)
                 .reindex(columns=type_order, fill_value=0)
             )
-            ax = plot_data.plot(kind="bar", stacked=True, color=color_art, figsize=(14, 6))
+            ax = plot_data.plot(kind="bar", stacked=True, color=colors_art, figsize=(14, 6))
             plt.xlabel("Tid (15-minutersintervall)")
             plt.ylabel("Antal ljudfiler")
             plt.title(format_title(species, int(plot_data.values.sum())))
@@ -661,24 +692,20 @@ def generate_bat_diagrams(input_files_list, diagrams_root, custom_time_range):
             plt.grid(True, axis='y')
             plt.savefig(os.path.join(output_dir_stacks_art, f"{safe_filename(species)}.png"))
             plt.close()
-
         print(f"Stapeldiagram ART sparade i mappen: {output_dir_stacks_art}")
 
-        # STAPELDIAGRAM – NVI
+        # SŁUPKI – NVI
         output_dir_stacks_nvi = output_dir_stacks + "_NVI"
         os.makedirs(output_dir_stacks_nvi, exist_ok=True)
-        color_nvi = [(255/255,0/255,0/255), (255/255,190/255,0/255), (169/255,169/255,169/255)]
-        type_order_nvi = ["Socialt", "Födosökande", "Förbiflygande"]
-
         for species in species_list:
             plot_data = (
                 agg[agg["species"] == species]
                 .pivot(index="interval", columns="obs_type", values="antal")
                 .fillna(0)
                 .reindex(all_intervals, fill_value=0)
-                .reindex(columns=type_order_nvi, fill_value=0)
+                .reindex(columns=type_order, fill_value=0)
             )
-            ax = plot_data.plot(kind="bar", stacked=True, color=color_nvi, figsize=(14, 6))
+            ax = plot_data.plot(kind="bar", stacked=True, color=colors_nvi, figsize=(14, 6))
             plt.xlabel("Tid (15-minutersintervall)")
             plt.ylabel("Antal ljudfiler")
             plt.title(format_title(species, int(plot_data.values.sum())))
@@ -690,23 +717,28 @@ def generate_bat_diagrams(input_files_list, diagrams_root, custom_time_range):
             plt.grid(True, axis='y')
             plt.savefig(os.path.join(output_dir_stacks_nvi, f"{safe_filename(species)}.png"))
             plt.close()
-
         print(f"Stapeldiagram NVI sparade i mappen: {output_dir_stacks_nvi}")
         print(f"Linjediagram sparade i mappen: {output_dir_lines}")
         print(f"Tidsintervall: {all_intervals[0]} – {all_intervals[-1]}")
 
-# ---- Fråga om diagramgenerering ----
+# ---- Pytanie o generowanie diagramów ----
 try:
     if messagebox.askyesno(
         "Generera fladdermusdiagram",
         "Vill du generera fladdermusdiagram nu?\n\n"
         "Du väljer mål-mapp i nästa steg."
     ):
-        chosen_base = filedialog.askdirectory(title="Välj mapp där resultaten ska sparas")
+        # Domyślna propozycja: Results (jeśli istnieje); w przeciwnym razie folder pierwszego pliku wejściowego
+        default_dir = results_dir if os.path.isdir(results_dir) else os.path.dirname(input_files[0])
+        chosen_base = filedialog.askdirectory(
+            title="Välj mapp där resultaten ska sparas",
+            initialdir=default_dir
+        )
         if chosen_base:
             diagrams_root = os.path.join(chosen_base, "diagramer")
         else:
-            diagrams_root = os.path.join(os.path.dirname(out_path), "diagramer")
+            diagrams_root = os.path.join(default_dir, "diagramer")
+
         os.makedirs(diagrams_root, exist_ok=True)
         print(f"Resultat kommer att sparas i: {diagrams_root}")
 
