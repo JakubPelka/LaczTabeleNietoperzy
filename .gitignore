@@ -2,3 +2,4 @@
 /parallel-graph/sampleData
 /parallel-graph/tests
 /parallel-graph/output
+parallel-graph/src/parallel_graph/chart.py

@@ -121,16 +121,23 @@ aktualnie widocznego zakresu.
 
 Pasek narzędzi wykresu zawiera dodatkowy przycisk **Wyczyść zaznaczenie** /
 **Clear selection** / **Rensa markering** oznaczony ikoną `X`. Usuwa on
-zaznaczenie Lasso lub Box Select bez zmiany zoomu i zakresu czasu.
+zaznaczenie Lasso lub Box Select bez zmiany zoomu i zakresu czasu. Przycisk jest
+umieszczony w osobnej grupie tego samego wiersza co standardowe narzędzia
+Plotly. Czyszczenie usuwa jednocześnie obrys zaznaczenia, stan zaznaczonych
+punktów i filtr tabeli.
 
 Po wskazaniu minuty pojawia się zbiorczy dymek ze wszystkimi widocznymi
 rejestracjami z tej minuty. Dzięki temu gatunki zarejestrowane równocześnie przez
 ten sam box są widoczne nawet wtedy, gdy ich markery mają tę samą wartość i
 nakładają się na wykresie. Dymek respektuje aktywne filtry źródeł i gatunków.
 
-Jeśli dana klasyfikacja wystąpi więcej niż raz w tym samym źródle i minucie,
-marker jest większy i zawiera liczbę wystąpień. Przy pojedynczym wystąpieniu
-symbol pozostaje bez cyfry. Wykres ma zwiększoną wysokość, aby większe symbole
+Jeśli w tym samym źródle i minucie wystąpi łącznie więcej niż jedna rejestracja,
+jeden reprezentatywny marker jest większy i zawiera ich łączną liczbę. Dotyczy
+to zarówno kilku rejestracji tego samego gatunku, jak i różnych gatunków, np.
+`1× Nyctalus noctula + 1× Vespertilio murinus` daje cyfrę `2`. Liczba jest
+dynamicznie przeliczana po zmianie filtrów lub ukryciu serii w legendzie, więc
+obejmuje wyłącznie aktualnie widoczne dane. Przy pojedynczym wystąpieniu symbol
+pozostaje bez cyfry. Wykres ma zwiększoną wysokość, aby większe symbole
 pozostawały czytelne również przy wielu równoległych seriach.
 
 ## Testy

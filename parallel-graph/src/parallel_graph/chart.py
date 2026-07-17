@@ -54,11 +54,28 @@ def build_chart_html(counts: Iterable[MinuteCount], title: str, language: str = 
     grouped: dict[tuple[str, str], list[MinuteCount]] = defaultdict(list)
     for row in rows:
         grouped[(row.source, row.species)].append(row)
+    minute_totals: dict[tuple[str, object], int] = defaultdict(int)
+    minute_representatives: dict[tuple[str, object], tuple[int, str]] = {}
+    for row in rows:
+        key = (row.source, row.minute)
+        minute_totals[key] += row.count
+        candidate = (row.count, row.species)
+        current = minute_representatives.get(key)
+        if current is None or candidate[0] > current[0] or (
+            candidate[0] == current[0] and candidate[1].casefold() < current[1].casefold()
+        ):
+            minute_representatives[key] = candidate
 
     figure = go.Figure()
     trace_filters = []
     for (source, taxon), items in sorted(grouped.items(), key=lambda item: (item[0][0], item[0][1].casefold())):
         color, symbol = style[source]
+        badge_counts = [
+            minute_totals[(source, item.minute)]
+            if minute_representatives[(source, item.minute)][1] == taxon
+            else 0
+            for item in items
+        ]
         figure.add_trace(go.Scatter(
             x=[item.minute for item in items],
             y=[item.count for item in items],
@@ -67,10 +84,10 @@ def build_chart_html(counts: Iterable[MinuteCount], title: str, language: str = 
             marker={
                 "color": color,
                 "symbol": symbol,
-                "size": [26 if item.count > 1 else 14 for item in items],
+                "size": [26 if count > 1 else 14 for count in badge_counts],
                 "line": {"width": 1, "color": "#202124"},
             },
-            text=[str(item.count) if item.count > 1 else "" for item in items],
+            text=[str(count) if count > 1 else "" for count in badge_counts],
             textposition="middle center",
             textfont={"color": _contrast_text_color(color), "size": 13, "weight": 700},
             customdata=[[source, taxon] for _ in items],
@@ -199,6 +216,8 @@ def build_chart_html(counts: Iterable[MinuteCount], title: str, language: str = 
     const tableLabels = {table_labels_json};
     const chartElement = document.getElementById('parallel-bat-chart');
     let selectedTableKeys = null;
+    let clearingSelection = false;
+    let updatingMarkerBadges = false;
     function selected(group) {{
       return new Set(Array.from(document.querySelectorAll(`input[data-filter="${{group}}"]:checked`)).map(x => x.value));
     }}
@@ -222,6 +241,45 @@ def build_chart_html(counts: Iterable[MinuteCount], title: str, language: str = 
       const axis = chartElement._fullLayout && chartElement._fullLayout.xaxis;
       if (!axis || !axis.range) return [null, null];
       return [new Date(axis.range[0]).getTime(), new Date(axis.range[1]).getTime()];
+    }}
+    function updateMarkerBadges() {{
+      if (updatingMarkerBadges) return Promise.resolve();
+      updatingMarkerBadges = true;
+      const summaries = new Map();
+      const texts = chartElement.data.map(trace => trace.x.map(() => ''));
+      const sizes = chartElement.data.map(trace => trace.x.map(() => 14));
+      traceFilters.forEach((filter, curveNumber) => {{
+        const trace = chartElement.data[curveNumber];
+        if (trace.visible === false || trace.visible === 'legendonly') return;
+        trace.x.forEach((minute, pointNumber) => {{
+          const key = JSON.stringify([filter.source, String(minute)]);
+          const count = Number(trace.y[pointNumber]);
+          const current = summaries.get(key);
+          if (!current) {{
+            summaries.set(key, {{total: count, curveNumber, pointNumber, count}});
+          }} else {{
+            current.total += count;
+            if (count > current.count || (count === current.count && curveNumber < current.curveNumber)) {{
+              current.curveNumber = curveNumber;
+              current.pointNumber = pointNumber;
+              current.count = count;
+            }}
+          }}
+        }});
+      }});
+      summaries.forEach(summary => {{
+        if (summary.total > 1) {{
+          texts[summary.curveNumber][summary.pointNumber] = String(summary.total);
+          sizes[summary.curveNumber][summary.pointNumber] = 26;
+        }}
+      }});
+      const updates = chartElement.data.map((_trace, curveNumber) =>
+        Plotly.restyle(chartElement, {{
+          text: [texts[curveNumber]],
+          'marker.size': [sizes[curveNumber]]
+        }}, [curveNumber])
+      );
+      return Promise.all(updates).finally(() => {{ updatingMarkerBadges = false; }});
     }}
     function appendCell(row, value, className = '') {{
       const cell = document.createElement('td');
@@ -267,6 +325,7 @@ def build_chart_html(counts: Iterable[MinuteCount], title: str, language: str = 
       document.getElementById('visible-row-count').textContent = rowCount;
     }}
     function applyPointSelection(eventData) {{
+      if (clearingSelection) return;
       if (!eventData || !Array.isArray(eventData.points)) {{
         selectedTableKeys = null;
         renderTable();
@@ -280,18 +339,22 @@ def build_chart_html(counts: Iterable[MinuteCount], title: str, language: str = 
       renderTable();
     }}
     function clearPointSelection() {{
-      selectedTableKeys = null;
-      Plotly.restyle(chartElement, {{selectedpoints: null}}).then(renderTable);
+      clearingSelection = true;
+      Plotly.relayout(chartElement, {{selections: []}}).then(() => {{
+        chartElement.data.forEach(trace => {{ trace.selectedpoints = null; }});
+        return Plotly.redraw(chartElement);
+      }}).finally(() => {{
+        selectedTableKeys = null;
+        clearingSelection = false;
+        renderTable();
+      }});
     }}
     function addClearSelectionModebarButton() {{
       const modebar = chartElement.querySelector('.modebar');
       if (!modebar || modebar.querySelector('[data-clear-selection]')) return;
-      let group = modebar.querySelector('.modebar-group:last-child');
-      if (!group) {{
-        group = document.createElement('div');
-        group.className = 'modebar-group';
-        modebar.appendChild(group);
-      }}
+      const group = document.createElement('div');
+      group.className = 'modebar-group';
+      group.setAttribute('data-clear-selection-group', 'true');
       const button = document.createElement('a');
       button.className = 'modebar-btn';
       button.rel = 'tooltip';
@@ -301,12 +364,15 @@ def build_chart_html(counts: Iterable[MinuteCount], title: str, language: str = 
       button.innerHTML = '<svg viewBox="0 0 1000 1000" class="icon" height="1em" width="1em"><path d="M185 120L500 435 815 120 880 185 565 500 880 815 815 880 500 565 185 880 120 815 435 500 120 185Z"></path></svg>';
       button.addEventListener('click', clearPointSelection);
       group.appendChild(button);
+      modebar.appendChild(group);
     }}
     function applyFilters() {{
       const activeSources = selected('source');
       const activeSpecies = selected('species');
       const visible = traceFilters.map(item => activeSources.has(item.source) && activeSpecies.has(item.species));
-      Plotly.restyle(chartElement, {{visible: visible}}).then(renderTable);
+      Plotly.restyle(chartElement, {{visible: visible}})
+        .then(updateMarkerBadges)
+        .then(renderTable);
     }}
     document.querySelectorAll('input[data-filter]').forEach(input => input.addEventListener('change', applyFilters));
     document.querySelectorAll('button[data-action]').forEach(button => button.addEventListener('click', () => {{
@@ -330,8 +396,12 @@ def build_chart_html(counts: Iterable[MinuteCount], title: str, language: str = 
       }}
       chartElement.on('plotly_relayout', renderTable);
       chartElement.on('plotly_restyle', renderTable);
-      chartElement.on('plotly_legendclick', () => setTimeout(renderTable, 0));
-      chartElement.on('plotly_legenddoubleclick', () => setTimeout(renderTable, 0));
+      chartElement.on('plotly_legendclick', () => setTimeout(() => {{
+        updateMarkerBadges().then(renderTable);
+      }}, 0));
+      chartElement.on('plotly_legenddoubleclick', () => setTimeout(() => {{
+        updateMarkerBadges().then(renderTable);
+      }}, 0));
       chartElement.on('plotly_afterplot', addClearSelectionModebarButton);
       chartElement.on('plotly_selected', applyPointSelection);
       chartElement.on('plotly_deselect', () => {{
@@ -339,7 +409,7 @@ def build_chart_html(counts: Iterable[MinuteCount], title: str, language: str = 
         renderTable();
       }});
       addClearSelectionModebarButton();
-      renderTable();
+      updateMarkerBadges().then(renderTable);
     }}
     initialiseTable();
   </script>
