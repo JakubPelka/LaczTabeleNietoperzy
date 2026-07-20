@@ -76,13 +76,55 @@ traktowane jako przelot. `NOISE` jest pomijane w zestawieniu gatunków.
 Nie dodawaj do repozytorium rzeczywistych danych lokalizacyjnych ani nagrań.
 Przykłady powinny być syntetyczne lub bezpieczne do publicznego udostępnienia.
 
-## Parallel Bat Graph
+## Parallel Activity — interaktywne porównanie źródeł
 
-Katalog [`parallel-graph`](parallel-graph/) zawiera odrębną, wielojęzyczną
-aplikację GUI. Porównuje dowolną liczbę plików, agreguje wpisy do minut i tworzy
-samodzielny HTML z filtrami, tabelą, zoomem, suwakiem czasu oraz eksportem PNG,
-CSV i raportu importu. Szczegóły znajdują się w
-[`parallel-graph/README.md`](parallel-graph/README.md).
+Katalog [`parallel-graph`](parallel-graph/) zawiera odrębną aplikację GUI do
+porównywania aktywności z dowolnej liczby skoroszytów Excel. Program odczytuje
+kolumny `DATE`, `TIME` i `MANUAL ID`, rozdziela klasyfikacje zapisane po
+przecinku, pomija puste wartości oraz `Noise`, a następnie tworzy samodzielny
+interaktywny plik HTML. Dane źródłowe nie są modyfikowane.
+
+### Funkcje widoku HTML
+
+- interfejs, wykres i komunikaty w języku polskim, angielskim lub szwedzkim;
+- osobne kolory i symbole dla źródeł oraz pełne etykiety `MANUAL ID`;
+- niezależne filtry źródeł i klasyfikacji, działające również z legendą;
+- przełączana rozdzielczość czasu: 1, 2, 3, 5, 10, 15, 30 lub 60 minut;
+- dynamiczne sumowanie obserwacji w wybranych przedziałach czasu;
+- zoom, przesuwanie osi i suwak ograniczania widocznego zakresu;
+- zbiorcze dymki dla obserwacji przypadających na ten sam czas;
+- wyróżnianie klasyfikacji nakładających się w tym samym punkcie wykresu;
+- tabela automatycznie synchronizowana z filtrami, zoomem i zaznaczeniem;
+- wybór punktów narzędziami Lasso i Box Select oraz przycisk czyszczenia;
+- eksport aktualnego, przefiltrowanego widoku do PNG;
+- nakładka ładowania podczas przeliczania filtrów i rozdzielczości czasu;
+- działanie gotowego HTML bez serwera i bez połączenia z internetem.
+
+Oprócz `parallel_bat_activity.html` aplikacja zapisuje zagregowane dane CSV oraz
+tekstowy raport importu z liczbą odczytanych i pominiętych rekordów.
+
+### Przygotowanie bibliotek i praca offline
+
+Przy pierwszym uruchomieniu z dostępem do internetu należy wykonać:
+
+```bash
+cd parallel-graph
+./parallel.sh
+```
+
+Skrypt pobiera `openpyxl`, `plotly` i ich zależności do lokalnego katalogu
+`parallel-graph/vendor`, bez instalowania ich globalnie i bez tworzenia
+środowiska `.venv`. Później cały katalog `parallel-graph`, razem z `vendor`,
+można skopiować na dysk USB i uruchamiać offline przez `parallel.py` lub
+`parallel.bat`.
+
+Tkinter musi być składnikiem używanej instalacji Pythona, ponieważ nie jest
+pakietem instalowanym przez `pip`. Jeśli lokalnych bibliotek brakuje,
+`parallel.py` pokazuje instrukcję ich przygotowania zamiast próbować połączyć
+się z internetem.
+
+Pełny opis danych wejściowych, obsługi wykresu i plików wynikowych znajduje się
+w [`parallel-graph/README.md`](parallel-graph/README.md).
 
 ## Struktura
 
