@@ -105,18 +105,26 @@ tekstowy raport importu z liczbą odczytanych i pominiętych rekordów.
 
 ### Przygotowanie bibliotek i praca offline
 
-Przy pierwszym uruchomieniu z dostępem do internetu należy wykonać:
+Z dostępem do internetu należy uruchomić skrypt odpowiedni dla systemu:
 
 ```bash
 cd parallel-graph
-./parallel.sh
+./parallel.sh  # Linux/macOS
 ```
 
-Skrypt pobiera `openpyxl`, `plotly` i ich zależności do lokalnego katalogu
-`parallel-graph/vendor`, bez instalowania ich globalnie i bez tworzenia
-środowiska `.venv`. Później cały katalog `parallel-graph`, razem z `vendor`,
-można skopiować na dysk USB i uruchamiać offline przez `parallel.py` lub
-`parallel.bat`.
+```text
+cd parallel-graph
+parallel.bat  # Windows
+```
+
+Oba skrypty pobierają `openpyxl`, `plotly` i ich zależności do lokalnego
+katalogu `parallel-graph/vendor`, bez instalowania ich globalnie i bez tworzenia
+środowiska `.venv`, po czym uruchamiają aplikację. Uruchomienie `.sh` lub `.bat`
+zakłada dostęp do internetu i aktualizuje lokalne pakiety.
+
+Później cały katalog `parallel-graph`, razem z `vendor`, można skopiować na dysk
+USB. Trybem w pełni offline jest bezpośrednie uruchomienie `parallel.py`
+odpowiednim interpreterem Pythona.
 
 Tkinter musi być składnikiem używanej instalacji Pythona, ponieważ nie jest
 pakietem instalowanym przez `pip`. Jeśli lokalnych bibliotek brakuje,
@@ -134,6 +142,23 @@ LaczTabeleNietoperzy/
 │   ├── merge_summary_charts.py
 │   └── merge_summary_and_nightly_charts.py
 ├── parallel-graph/
+│   ├── src/parallel_graph/
+│   │   ├── __init__.py
+│   │   ├── __main__.py
+│   │   ├── aggregation.py
+│   │   ├── app.py
+│   │   ├── chart.py
+│   │   ├── excel_reader.py
+│   │   ├── export.py
+│   │   ├── models.py
+│   │   └── translations.py
+│   ├── vendor/              # lokalne pakiety, tworzone przez .sh lub .bat
+│   ├── parallel.py          # uruchomienie offline
+│   ├── parallel.sh          # przygotowanie online: Linux/macOS
+│   ├── parallel.bat         # przygotowanie online: Windows
+│   ├── pyproject.toml
+│   ├── requirements.txt
+│   └── README.md
 ├── SampleData/
 ├── requirements.txt
 ├── start.py

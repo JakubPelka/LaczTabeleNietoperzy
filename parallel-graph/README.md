@@ -42,16 +42,21 @@ Excela oraz najczęściej spotykane wartości tekstowe.
 
 ## Przygotowanie i uruchomienie offline (także z USB)
 
-Przy dostępie do internetu uruchom najpierw:
+Przy dostępie do internetu uruchom odpowiedni skrypt przygotowawczy:
 
 ```bash
-./parallel.sh
+./parallel.sh  # Linux/macOS
 ```
 
-Starter pobiera `openpyxl`, `plotly` i wszystkie ich zależności do lokalnego
-folderu `vendor`, a następnie uruchamia program. Nie tworzy `.venv` i nie
-instaluje pakietów globalnie. Każde kolejne uruchomienie `.sh` aktualizuje
-lokalny zestaw zgodnie z `requirements.txt`.
+```text
+parallel.bat  # Windows
+```
+
+Startery pobierają `openpyxl`, `plotly` i wszystkie ich zależności do lokalnego
+folderu `vendor`, a następnie uruchamiają program. Nie tworzą `.venv` i nie
+instalują pakietów globalnie. Każde kolejne uruchomienie `.sh` lub `.bat`
+aktualizuje lokalny zestaw zgodnie z `requirements.txt` i wymaga dostępu do
+internetu.
 
 Po skopiowaniu całego katalogu `parallel-graph` (razem z `vendor`) można
 uruchamiać aplikację bez internetu bezpośrednio przez `parallel.py`. Starter
@@ -63,14 +68,11 @@ Windows: otwórz dwukrotnie `parallel.py` albo wskaż wprost interpreter z USB:
 X:\sciezka\do\python.exe parallel.py
 ```
 
-Można również użyć `parallel.bat`. Starter `.bat` uruchamia `parallel.py`
-dostępnym Pythonem i korzysta z wcześniej pobranego folderu `vendor`.
-
 Linux/macOS:
 
 
 ```bash
-python3 parallel.py  # offline, po wcześniejszym uruchomieniu parallel.sh
+python3 parallel.py  # offline, po wcześniejszym przygotowaniu vendor
 ```
 
 Tkinter nie jest pakietem `pip`: musi należeć do używanej instalacji Pythona.
@@ -192,7 +194,7 @@ X:\sciezka\do\python.exe -m unittest discover -s tests -v
 
 ```text
 parallel-graph/
-├── vendor/          # lokalne biblioteki utworzone przez parallel.sh
+├── vendor/          # lokalne biblioteki utworzone przez .sh lub .bat
 ├── parallel.sh
 ├── parallel.bat
 ├── parallel.py
