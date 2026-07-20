@@ -39,27 +39,34 @@ Nagłówki mogą znajdować się w jednym z pierwszych 50 wierszy. Pozostałe ko
 nie wpływają na analizę. Program obsługuje daty i czasy zapisane jako wartości
 Excela oraz najczęściej spotykane wartości tekstowe.
 
-## Uruchomienie w systemie Linux
+## Uruchomienie offline (także z USB)
 
-Nadaj starterowi prawo wykonania (w repozytorium jest już ustawione), a następnie
-uruchom:
+Starter nie tworzy `.venv`, nie uruchamia `pip` i nie pobiera niczego z
+internetu. Używa dokładnie tego interpretera Python, którym został otwarty.
+Python na USB musi już zawierać `openpyxl`, `plotly` oraz Tkinter.
+
+Windows: otwórz dwukrotnie `parallel.py` albo wskaż wprost interpreter z USB:
+
+```text
+X:\sciezka\do\python.exe parallel.py
+```
+
+Można również zachować dotychczasowy sposób uruchamiania przez `parallel.bat`.
+Starter `.bat` jedynie uruchamia `parallel.py` dostępnym Pythonem — nie tworzy
+środowiska i niczego nie pobiera. Jeśli biblioteki brakuje, starter pokaże jej
+nazwę i zakończy pracę bez próby pobierania.
+
+Linux/macOS:
+
 
 ```bash
+python3 parallel.py
+# albo:
 ./parallel.sh
 ```
 
-Starter automatycznie utworzy `.venv` i zainstaluje zależności przy pierwszym
-uruchomieniu. Jeśli brakuje Tkinter, na Ubuntu/Debian zainstaluj go poleceniem:
-
-```bash
-sudo apt install python3-tk python3-venv
-```
-
-## Uruchomienie w systemie Windows
-
-Zainstaluj Python 3.10 lub nowszy z [python.org](https://www.python.org/), razem
-z opcjonalnym komponentem Tcl/Tk. Następnie kliknij dwukrotnie `parallel.bat`.
-Starter sam utworzy `.venv` i zainstaluje potrzebne biblioteki.
+`requirements.txt` pozostaje wyłącznie listą bibliotek potrzebną podczas
+wcześniejszego przygotowywania kompletnego środowiska Python na USB.
 
 ## Obsługa
 
@@ -149,16 +156,17 @@ czytelne również przy wielu równoległych seriach.
 
 ## Testy
 
-Po utworzeniu środowiska uruchom:
+Uruchom Pythonem zawierającym wymagane biblioteki:
 
 ```bash
-.venv/bin/python -m unittest discover -s tests -v
+PYTHONPATH=src python3 -m unittest discover -s tests -v
 ```
 
-W systemie Windows:
+W systemie Windows, używając Pythona z USB:
 
-```bat
-.venv\Scripts\python.exe -m unittest discover -s tests -v
+```text
+set PYTHONPATH=src
+X:\sciezka\do\python.exe -m unittest discover -s tests -v
 ```
 
 ## Struktura projektu
@@ -167,6 +175,7 @@ W systemie Windows:
 parallel-graph/
 ├── parallel.sh
 ├── parallel.bat
+├── parallel.py
 ├── pyproject.toml
 ├── requirements.txt
 ├── README.md

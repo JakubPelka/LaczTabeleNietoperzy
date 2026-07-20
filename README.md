@@ -26,26 +26,34 @@ Wariant nocny dodatkowo dzieli rekordy na noce terenowe. Rekord z godziną przed
 nocy `17/18.07`. Każda noc otrzymuje osobne katalogi wykresów i etykietę zakresu
 dat. W GUI można niezależnie włączyć wykresy zbiorcze i noc-po-nocy.
 
-## Uruchomienie
+## Uruchomienie offline (także z USB)
+
+Starter nie tworzy środowiska, nie uruchamia `pip` i nie łączy się z internetem.
+Korzysta z tego interpretera Python, którym został otwarty. Portable Python na
+USB musi więc już zawierać `pandas`, `openpyxl`, `matplotlib` oraz Tkinter.
+
+Windows: otwórz dwukrotnie plik `start.py` albo uruchom go za pomocą Pythona z
+USB:
+
+```text
+X:\sciezka\do\python.exe start.py
+```
+
+Można również zachować dotychczasowy sposób uruchamiania przez
+`run_algorithms.bat`. Starter `.bat` jedynie uruchamia `start.py` dostępnym
+Pythonem — nie tworzy środowiska i niczego nie pobiera.
 
 Linux/macOS:
 
 ```bash
+python3 start.py
+# albo:
 ./run_algorithms.sh
 ```
 
-Windows:
-
-```bat
-run_algorithms.bat
-```
-
-Starter tworzy lokalne `.venv`, instaluje `requirements.txt` i pyta o wariant
-algorytmu. Na Linuxie może być potrzebny systemowy pakiet Tkinter, np.:
-
-```bash
-sudo apt install python3-tk python3-venv
-```
+Starter pokazuje okno wyboru wariantu algorytmu. Jeśli brakuje biblioteki,
+wyświetla jej nazwę i kończy pracę bez próby pobierania. `requirements.txt` jest
+wyłącznie listą bibliotek potrzebną przy przygotowywaniu kompletnego Pythona USB.
 
 Algorytm można również uruchomić bezpośrednio:
 
@@ -86,6 +94,7 @@ LaczTabeleNietoperzy/
 ├── parallel-graph/
 ├── SampleData/
 ├── requirements.txt
+├── start.py
 ├── run_algorithms.bat
 ├── run_algorithms.sh
 └── README.md
