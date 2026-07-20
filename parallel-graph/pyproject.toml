@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "parallel-bat-graph"
-version = "1.0.0"
+version = "0.2.1"
 description = "Interactive minute-resolution comparison of bat registrations from multiple Excel sources"
 requires-python = ">=3.10"
 dependencies = [
@@ -17,4 +17,3 @@ parallel-bat-graph = "parallel_graph.app:main"
 
 [tool.setuptools.packages.find]
 where = ["src"]
-
