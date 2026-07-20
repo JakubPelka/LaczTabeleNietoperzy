@@ -1,11 +1,9 @@
-# Rekommenderat filnamn:
-# Sla_ihop_exceL_fladdermus_tabell_och_skapa_diagram_dobowy.py
-#
-# Nytt:
-# - GUI z dwoma niezależnymi opcjami: „Generera samlade diagram” i „Generera natt-för-natt diagram”.
-# - Nocne wykresy tworzone DODATKOWO do standardowych.
-# - Etykieta nocy w tytułach: DD/NN.MM (np. 22/23.08).
-# Reszta logiki (Excel *_NVI i *_ART, globalna oś Y, kolory, X-oś auto/manual) bez zmian.
+"""Merge bat Excel tables and create combined and/or per-night charts.
+
+GUI udostępnia dwie niezależne opcje: wykresy zbiorcze oraz noc-po-nocy.
+Wykresy nocne są tworzone dodatkowo, z etykietą DD/NN.MM w tytułach.
+Eksport Excel, globalna oś Y, kolory i zakres osi X pozostają wspólne.
+"""
 
 import os
 import re

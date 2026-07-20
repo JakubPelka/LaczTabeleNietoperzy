@@ -5,6 +5,7 @@ from __future__ import annotations
 import html
 import json
 from collections import defaultdict
+from datetime import timedelta
 from pathlib import Path
 from typing import Iterable
 
@@ -44,6 +45,8 @@ def build_chart_html(counts: Iterable[MinuteCount], title: str, language: str = 
         raise ValueError("Brak danych do przedstawienia na wykresie.")
     sources = sorted({row.source for row in rows})
     species = sorted({row.species for row in rows}, key=str.casefold)
+    time_minimum = min(row.minute for row in rows) - timedelta(hours=24)
+    time_maximum = max(row.minute for row in rows) + timedelta(hours=24)
     style = {
         source: (
             SOURCE_COLORS[index % len(SOURCE_COLORS)],
@@ -54,28 +57,23 @@ def build_chart_html(counts: Iterable[MinuteCount], title: str, language: str = 
     grouped: dict[tuple[str, str], list[MinuteCount]] = defaultdict(list)
     for row in rows:
         grouped[(row.source, row.species)].append(row)
-    minute_totals: dict[tuple[str, object], int] = defaultdict(int)
-    minute_representatives: dict[tuple[str, object], tuple[int, str]] = {}
+    coordinate_series: dict[tuple[str, object, int], list[str]] = defaultdict(list)
     for row in rows:
-        key = (row.source, row.minute)
-        minute_totals[key] += row.count
-        candidate = (row.count, row.species)
-        current = minute_representatives.get(key)
-        if current is None or candidate[0] > current[0] or (
-            candidate[0] == current[0] and candidate[1].casefold() < current[1].casefold()
-        ):
-            minute_representatives[key] = candidate
+        coordinate_series[(row.source, row.minute, row.count)].append(row.species)
 
     figure = go.Figure()
     trace_filters = []
     for (source, taxon), items in sorted(grouped.items(), key=lambda item: (item[0][0], item[0][1].casefold())):
         color, symbol = style[source]
-        badge_counts = [
-            minute_totals[(source, item.minute)]
-            if minute_representatives[(source, item.minute)][1] == taxon
-            else 0
-            for item in items
-        ]
+        badge_counts = []
+        for item in items:
+            overlapping_series = coordinate_series[(source, item.minute, item.count)]
+            representative = min(overlapping_series, key=str.casefold)
+            badge_counts.append(
+                len(overlapping_series)
+                if representative == taxon and len(overlapping_series) > 1
+                else 0
+            )
         figure.add_trace(go.Scatter(
             x=[item.minute for item in items],
             y=[item.count for item in items],
@@ -104,7 +102,12 @@ def build_chart_html(counts: Iterable[MinuteCount], title: str, language: str = 
         hovermode="x unified",
         xaxis={
             "title": tr(language, "x_axis"),
-            "rangeslider": {"visible": True},
+            "minallowed": time_minimum,
+            "maxallowed": time_maximum,
+            "rangeslider": {
+                "visible": True,
+                "range": [time_minimum, time_maximum],
+            },
             "showspikes": True,
             "spikemode": "across",
             "spikesnap": "cursor",
@@ -252,24 +255,24 @@ def build_chart_html(counts: Iterable[MinuteCount], title: str, language: str = 
         const trace = chartElement.data[curveNumber];
         if (trace.visible === false || trace.visible === 'legendonly') return;
         trace.x.forEach((minute, pointNumber) => {{
-          const key = JSON.stringify([filter.source, String(minute)]);
           const count = Number(trace.y[pointNumber]);
+          const key = JSON.stringify([filter.source, String(minute), count]);
           const current = summaries.get(key);
           if (!current) {{
-            summaries.set(key, {{total: count, curveNumber, pointNumber, count}});
+            summaries.set(key, {{seriesCount: 1, curveNumber, pointNumber, count}});
           }} else {{
-            current.total += count;
-            if (count > current.count || (count === current.count && curveNumber < current.curveNumber)) {{
+            current.seriesCount += 1;
+            if (curveNumber < current.curveNumber) {{
               current.curveNumber = curveNumber;
               current.pointNumber = pointNumber;
-              current.count = count;
             }}
           }}
         }});
       }});
       summaries.forEach(summary => {{
-        if (summary.total > 1) {{
-          texts[summary.curveNumber][summary.pointNumber] = String(summary.total);
+        const badge = summary.seriesCount;
+        if (badge > 1) {{
+          texts[summary.curveNumber][summary.pointNumber] = String(badge);
           sizes[summary.curveNumber][summary.pointNumber] = 26;
         }}
       }});

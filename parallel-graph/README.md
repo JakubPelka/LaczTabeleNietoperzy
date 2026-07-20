@@ -18,8 +18,8 @@ Projekt nie modyfikuje plików wejściowych ani istniejącego narzędzia
   wystąpienia w tym samym punkcie czasu;
 - pomijanie pustych klasyfikacji oraz `Noise`;
 - osobny kolor i symbol dla każdego źródła;
-- liczba wewnątrz powiększonego markera, gdy w minucie występuje więcej niż
-  jedna rejestracja danej klasyfikacji;
+- wyróżnianie różnych klasyfikacji nakładających się w tej samej minucie na tej
+  samej wartości osi Y;
 - niezależne filtry źródeł i klasyfikacji `MANUAL ID`;
 - dynamiczna tabela danych zsynchronizowana z wykresem;
 - zoom, przesuwanie, wybór zakresu i suwak czasu;
@@ -99,6 +99,8 @@ wystąpienie z tym samym czasem i źródłem.
 
 Dolny suwak wykresu służy wyłącznie do zawężania i przesuwania widocznego zakresu
 czasu. Nie zmienia danych ani filtrów źródeł i gatunków.
+Zakres osi czasu, przesuwania i suwaka jest ograniczony do przedziału od 24 godzin
+przed najwcześniejszą obserwacją do 24 godzin po najpóźniejszej obserwacji.
 
 Przycisk **Drukuj / PNG**, **Print / PNG** lub **Skriv ut / PNG** zapisuje
 bieżący widok wykresu jako obraz PNG w
@@ -131,14 +133,19 @@ rejestracjami z tej minuty. Dzięki temu gatunki zarejestrowane równocześnie p
 ten sam box są widoczne nawet wtedy, gdy ich markery mają tę samą wartość i
 nakładają się na wykresie. Dymek respektuje aktywne filtry źródeł i gatunków.
 
-Jeśli w tym samym źródle i minucie wystąpi łącznie więcej niż jedna rejestracja,
-jeden reprezentatywny marker jest większy i zawiera ich łączną liczbę. Dotyczy
-to zarówno kilku rejestracji tego samego gatunku, jak i różnych gatunków, np.
-`1× Nyctalus noctula + 1× Vespertilio murinus` daje cyfrę `2`. Liczba jest
-dynamicznie przeliczana po zmianie filtrów lub ukryciu serii w legendzie, więc
-obejmuje wyłącznie aktualnie widoczne dane. Przy pojedynczym wystąpieniu symbol
-pozostaje bez cyfry. Wykres ma zwiększoną wysokość, aby większe symbole
-pozostawały czytelne również przy wielu równoległych seriach.
+Liczebność danej klasyfikacji pokazuje wyłącznie położenie punktu na osi Y.
+Przykładowo trzy rejestracje jednego gatunku dają zwykły punkt na Y=3 bez cyfry
+w markerze.
+
+Różne klasyfikacje są wykrywane jako nakładające się tylko wtedy, gdy
+pochodzą z tego samego źródła, tej samej minuty i mają tę samą liczebność, czyli
+leżą w tej samej współrzędnej wykresu. Badge pokazuje liczbę nakładających się
+klasyfikacji, a nie liczbę rejestracji. Zarówno `1× Nyctalus noctula + 1×
+Vespertilio murinus` na Y=1, jak i `2× Nyctalus noctula + 2× Eptesicus nilssonii`
+na Y=2 dają badge `2`. Punkty o różnych wartościach Y pozostają oddzielne.
+Wyróżnienie jest dynamicznie przeliczane po zmianie filtrów lub ukryciu serii w
+legendzie. Wykres ma zwiększoną wysokość, aby większe symbole pozostawały
+czytelne również przy wielu równoległych seriach.
 
 ## Testy
 

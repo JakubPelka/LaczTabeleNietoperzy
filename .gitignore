@@ -3,3 +3,8 @@
 /parallel-graph/tests
 /parallel-graph/output
 parallel-graph/src/parallel_graph/chart.py
+.venv/
+__pycache__/
+*.py[cod]
+Results/
+diagramer/

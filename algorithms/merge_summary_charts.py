@@ -1,3 +1,5 @@
+"""Merge bat Excel tables and optionally create combined charts."""
+
 import os
 import re
 import sys
