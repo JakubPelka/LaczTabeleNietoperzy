@@ -22,6 +22,7 @@ Projekt nie modyfikuje plików wejściowych ani istniejącego narzędzia
   samej wartości osi Y;
 - niezależne filtry źródeł i klasyfikacji `MANUAL ID`;
 - dynamiczna tabela danych zsynchronizowana z wykresem;
+- przełączana agregacja czasu: 1, 2, 3, 5, 10, 15, 30 lub 60 minut;
 - zoom, przesuwanie, wybór zakresu i suwak czasu;
 - przycisk eksportu PNG zapisujący aktualnie widoczny stan wykresu;
 - samodzielny HTML działający bez serwera i bez internetu;
@@ -39,11 +40,22 @@ Nagłówki mogą znajdować się w jednym z pierwszych 50 wierszy. Pozostałe ko
 nie wpływają na analizę. Program obsługuje daty i czasy zapisane jako wartości
 Excela oraz najczęściej spotykane wartości tekstowe.
 
-## Uruchomienie offline (także z USB)
+## Przygotowanie i uruchomienie offline (także z USB)
 
-Starter nie tworzy `.venv`, nie uruchamia `pip` i nie pobiera niczego z
-internetu. Używa dokładnie tego interpretera Python, którym został otwarty.
-Python na USB musi już zawierać `openpyxl`, `plotly` oraz Tkinter.
+Przy dostępie do internetu uruchom najpierw:
+
+```bash
+./parallel.sh
+```
+
+Starter pobiera `openpyxl`, `plotly` i wszystkie ich zależności do lokalnego
+folderu `vendor`, a następnie uruchamia program. Nie tworzy `.venv` i nie
+instaluje pakietów globalnie. Każde kolejne uruchomienie `.sh` aktualizuje
+lokalny zestaw zgodnie z `requirements.txt`.
+
+Po skopiowaniu całego katalogu `parallel-graph` (razem z `vendor`) można
+uruchamiać aplikację bez internetu bezpośrednio przez `parallel.py`. Starter
+zawsze dodaje lokalny folder bibliotek do ścieżki importu.
 
 Windows: otwórz dwukrotnie `parallel.py` albo wskaż wprost interpreter z USB:
 
@@ -51,22 +63,19 @@ Windows: otwórz dwukrotnie `parallel.py` albo wskaż wprost interpreter z USB:
 X:\sciezka\do\python.exe parallel.py
 ```
 
-Można również zachować dotychczasowy sposób uruchamiania przez `parallel.bat`.
-Starter `.bat` jedynie uruchamia `parallel.py` dostępnym Pythonem — nie tworzy
-środowiska i niczego nie pobiera. Jeśli biblioteki brakuje, starter pokaże jej
-nazwę i zakończy pracę bez próby pobierania.
+Można również użyć `parallel.bat`. Starter `.bat` uruchamia `parallel.py`
+dostępnym Pythonem i korzysta z wcześniej pobranego folderu `vendor`.
 
 Linux/macOS:
 
 
 ```bash
-python3 parallel.py
-# albo:
-./parallel.sh
+python3 parallel.py  # offline, po wcześniejszym uruchomieniu parallel.sh
 ```
 
-`requirements.txt` pozostaje wyłącznie listą bibliotek potrzebną podczas
-wcześniejszego przygotowywania kompletnego środowiska Python na USB.
+Tkinter nie jest pakietem `pip`: musi należeć do używanej instalacji Pythona.
+Na Ubuntu/Debian można go doinstalować pakietem `python3-tk`; instalator Pythona
+dla Windows powinien zawierać opcjonalny komponent Tcl/Tk.
 
 ## Obsługa
 
@@ -117,6 +126,16 @@ zoom i zakres czasu. Panel checkboxów nie jest umieszczany na obrazie.
 Filtry źródeł i gatunków działają łącznie. Można więc pozostawić wszystkie
 źródła i jeden gatunek albo jedno źródło i wiele gatunków.
 
+Przełącznik rozdzielczości czasu sumuje punkty w przedziałach rozpoczynających
+się o pełnej wielokrotności wybranej wartości. Przykładowo dla 15 minut są to
+`01:00–01:14`, `01:15–01:29` itd. Domyślna rozdzielczość to 1 minuta.
+Zmiana działa bez ponownego wczytywania plików i aktualizuje wykres, tabelę,
+dymki, oznaczenia nakładających się klasyfikacji oraz eksport PNG. Filtry i
+aktualny zakres czasu pozostają zachowane.
+
+Podczas zmiany rozdzielczości oraz filtrów źródeł lub gatunków wyświetlana jest
+nakładka ładowania. Znika po zakończeniu przeliczenia wykresu i tabeli.
+
 Pod wykresem znajduje się tabela z kolumnami: minuta, źródło, `MANUAL ID` i
 liczba. Pokazuje wyłącznie dane widoczne w aktualnym zakresie wykresu. Aktualizuje
 się automatycznie po zmianie checkboxów, ukryciu serii w legendzie, użyciu zoomu
@@ -159,13 +178,13 @@ czytelne również przy wielu równoległych seriach.
 Uruchom Pythonem zawierającym wymagane biblioteki:
 
 ```bash
-PYTHONPATH=src python3 -m unittest discover -s tests -v
+PYTHONPATH="vendor:src" python3 -m unittest discover -s tests -v
 ```
 
 W systemie Windows, używając Pythona z USB:
 
 ```text
-set PYTHONPATH=src
+set PYTHONPATH=vendor;src
 X:\sciezka\do\python.exe -m unittest discover -s tests -v
 ```
 
@@ -173,6 +192,7 @@ X:\sciezka\do\python.exe -m unittest discover -s tests -v
 
 ```text
 parallel-graph/
+├── vendor/          # lokalne biblioteki utworzone przez parallel.sh
 ├── parallel.sh
 ├── parallel.bat
 ├── parallel.py

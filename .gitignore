@@ -2,6 +2,7 @@
 /parallel-graph/sampleData
 /parallel-graph/tests
 /parallel-graph/output
+/parallel-graph/vendor
 parallel-graph/src/parallel_graph/chart.py
 .venv/
 __pycache__/

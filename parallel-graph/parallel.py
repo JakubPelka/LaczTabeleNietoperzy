@@ -1,4 +1,4 @@
-"""Offline launcher for Parallel Bat Graph using the current Python."""
+"""Offline launcher for Parallel Bat Graph using project-local packages."""
 
 from __future__ import annotations
 
@@ -8,10 +8,10 @@ from pathlib import Path
 
 
 PROJECT_DIR = Path(__file__).resolve().parent
+VENDOR_DIR = PROJECT_DIR / "vendor"
 REQUIRED_MODULES = {
     "openpyxl": "openpyxl",
     "plotly": "plotly",
-    "tkinter": "Tkinter (Tcl/Tk)",
 }
 
 
@@ -25,15 +25,27 @@ def show_error(message: str) -> None:
 
 
 def main() -> int:
+    # ``parallel.sh`` installs third-party packages here. Keeping this path
+    # first makes the downloaded copy available to direct offline launches.
+    sys.path.insert(0, str(VENDOR_DIR))
+
     missing = [
-        label for module, label in REQUIRED_MODULES.items() if importlib.util.find_spec(module) is None
+        label for module, label in REQUIRED_MODULES.items() if not (VENDOR_DIR / module).exists()
     ]
     if missing:
         show_error(
-            "W używanym Pythonie brakuje bibliotek:\n\n- "
+            "Brakuje lokalnych bibliotek programu:\n\n- "
             + "\n- ".join(missing)
-            + "\n\nStarter działa offline i nie pobiera pakietów. "
-            "Uruchom go Pythonem z USB, który ma już te biblioteki."
+            + "\n\nPołącz komputer z internetem i uruchom raz parallel.sh. "
+            "Później parallel.py będzie działać offline."
+        )
+        return 1
+
+    if importlib.util.find_spec("tkinter") is None:
+        show_error(
+            "W używanym Pythonie brakuje Tkinter (Tcl/Tk).\n\n"
+            "Tkinter jest częścią instalacji Pythona i nie może zostać "
+            "pobrany przez pip. Zainstaluj Python z obsługą Tcl/Tk."
         )
         return 1
 

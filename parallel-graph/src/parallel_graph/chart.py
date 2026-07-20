@@ -139,11 +139,22 @@ def build_chart_html(counts: Iterable[MinuteCount], title: str, language: str = 
         "selectionActive": tr(language, "selection_active"),
         "clearSelection": tr(language, "clear_selection"),
         "noData": tr(language, "no_visible_data"),
+        "resolutionAxis": tr(language, "resolution_axis", resolution="{resolution}"),
     }, ensure_ascii=False).replace("</", "<\\/")
     safe_title = html.escape(title)
     filters_aria = html.escape(tr(language, "filters_aria"), quote=True)
     sources_label = html.escape(tr(language, "sources"))
     species_label = html.escape(tr(language, "species"))
+    resolution_label = html.escape(tr(language, "time_resolution"))
+    resolution_options = (
+        (1, "minute_1"), (2, "minutes_2"), (3, "minutes_3"),
+        (5, "minutes_5"), (10, "minutes_10"), (15, "minutes_15"),
+        (30, "minutes_30"), (60, "hour_1"),
+    )
+    resolution_options_html = "".join(
+        f'<option value="{minutes}">{html.escape(tr(language, key))}</option>'
+        for minutes, key in resolution_options
+    )
     all_label = html.escape(tr(language, "all"))
     none_label = html.escape(tr(language, "none"))
     print_label = html.escape(tr(language, "print_png"))
@@ -152,6 +163,7 @@ def build_chart_html(counts: Iterable[MinuteCount], title: str, language: str = 
     table_source = html.escape(tr(language, "table_source"))
     table_manual_id = html.escape(tr(language, "table_manual_id"))
     table_count = html.escape(tr(language, "table_count"))
+    loading_results = html.escape(tr(language, "loading_results"))
     return f"""<!doctype html>
 <html lang="{html.escape(language, quote=True)}">
 <head>
@@ -165,11 +177,12 @@ def build_chart_html(counts: Iterable[MinuteCount], title: str, language: str = 
     header h1 {{ margin: 0; }}
     .export-button {{ border: 1px solid #0969da; border-radius: 6px; background: #0969da; color: white; font-weight: 650; padding: 8px 14px; }}
     .export-button:hover {{ background: #0757b5; }}
-    .filters {{ display: grid; grid-template-columns: minmax(220px, 1fr) 2fr; gap: 14px; padding: 10px 22px; }}
+    .filters {{ display: grid; grid-template-columns: minmax(220px, 1fr) 2fr minmax(180px, .7fr); gap: 14px; padding: 10px 22px; }}
     fieldset {{ background: white; border: 1px solid #d0d7de; border-radius: 8px; max-height: 170px; overflow: auto; }}
     legend {{ font-weight: 650; }}
     label {{ display: inline-block; margin: 4px 12px 4px 0; white-space: nowrap; }}
     button {{ margin: 3px 6px 5px 0; padding: 4px 9px; cursor: pointer; }}
+    #time-resolution {{ width: 100%; max-width: 220px; margin: 6px 0; padding: 6px 8px; }}
     .chart-wrap {{ min-height: 760px; margin: 8px 22px 22px; background: white; border: 1px solid #d0d7de; border-radius: 8px; }}
     .table-section {{ margin: 0 22px 28px; padding: 16px; background: white; border: 1px solid #d0d7de; border-radius: 8px; }}
     .table-heading {{ display: flex; align-items: baseline; justify-content: space-between; gap: 12px; margin-bottom: 10px; }}
@@ -182,10 +195,19 @@ def build_chart_html(counts: Iterable[MinuteCount], title: str, language: str = 
     td:last-child, th:last-child {{ text-align: right; }}
     tbody tr:nth-child(even) {{ background: #fbfcfd; }}
     .no-data {{ padding: 20px; text-align: center !important; color: #57606a; }}
+    .loading-overlay {{ position: fixed; inset: 0; z-index: 10000; display: flex; align-items: center; justify-content: center; background: rgba(246, 248, 250, .78); backdrop-filter: blur(1px); }}
+    .loading-overlay[hidden] {{ display: none; }}
+    .loading-message {{ display: flex; align-items: center; gap: 13px; padding: 16px 22px; border: 1px solid #d0d7de; border-radius: 9px; background: white; box-shadow: 0 8px 30px rgba(31, 35, 40, .18); font-weight: 650; }}
+    .loading-spinner {{ width: 24px; height: 24px; border: 3px solid #b6d4fe; border-top-color: #0969da; border-radius: 50%; animation: loading-spin .8s linear infinite; }}
+    @keyframes loading-spin {{ to {{ transform: rotate(360deg); }} }}
+    @media (prefers-reduced-motion: reduce) {{ .loading-spinner {{ animation-duration: 1.8s; }} }}
     @media (max-width: 800px) {{ .filters {{ grid-template-columns: 1fr; }} }}
   </style>
 </head>
 <body>
+  <div id="loading-overlay" class="loading-overlay" role="status" aria-live="polite" aria-busy="true" hidden>
+    <div class="loading-message"><span class="loading-spinner" aria-hidden="true"></span><span>{loading_results}</span></div>
+  </div>
   <header>
     <h1>{safe_title}</h1>
     <button id="export-png" class="export-button" type="button">{print_label}</button>
@@ -198,6 +220,9 @@ def build_chart_html(counts: Iterable[MinuteCount], title: str, language: str = 
     <fieldset><legend>{species_label}</legend>
       <button type="button" data-action="all" data-group="species">{all_label}</button>
       <button type="button" data-action="none" data-group="species">{none_label}</button><br>{species_boxes}
+    </fieldset>
+    <fieldset><legend>{resolution_label}</legend>
+      <select id="time-resolution">{resolution_options_html}</select>
     </fieldset>
   </section>
   <main class="chart-wrap">{chart}</main>
@@ -215,12 +240,20 @@ def build_chart_html(counts: Iterable[MinuteCount], title: str, language: str = 
   </section>
   <script>
     const traceFilters = {filters_json};
-    const tableRows = {table_rows_json};
+    const baseTableRows = {table_rows_json};
+    let tableRows = baseTableRows;
     const tableLabels = {table_labels_json};
     const chartElement = document.getElementById('parallel-bat-chart');
     let selectedTableKeys = null;
     let clearingSelection = false;
     let updatingMarkerBadges = false;
+    function runWithLoading(task) {{
+      const overlay = document.getElementById('loading-overlay');
+      overlay.hidden = false;
+      return new Promise(resolve => {{
+        window.requestAnimationFrame(() => window.requestAnimationFrame(resolve));
+      }}).then(task).finally(() => {{ overlay.hidden = true; }});
+    }}
     function selected(group) {{
       return new Set(Array.from(document.querySelectorAll(`input[data-filter="${{group}}"]:checked`)).map(x => x.value));
     }}
@@ -229,6 +262,60 @@ def build_chart_html(counts: Iterable[MinuteCount], title: str, language: str = 
     }}
     function tableKey(minute, source, species) {{
       return JSON.stringify([minute, source, species]);
+    }}
+    function bucketMinute(minute, resolution) {{
+      const value = new Date(minute);
+      value.setMinutes(Math.floor(value.getMinutes() / resolution) * resolution, 0, 0);
+      const localOffset = value.getTimezoneOffset() * 60000;
+      return new Date(value.getTime() - localOffset).toISOString().slice(0, 19);
+    }}
+    function aggregateRows(resolution) {{
+      if (resolution === 1) return baseTableRows.map(row => ({{...row}}));
+      const groupedRows = new Map();
+      baseTableRows.forEach(row => {{
+        const minute = bucketMinute(row.minute, resolution);
+        const key = tableKey(minute, row.source, row.species);
+        const current = groupedRows.get(key);
+        if (current) current.count += Number(row.count);
+        else groupedRows.set(key, {{...row, minute, count: Number(row.count)}});
+      }});
+      return Array.from(groupedRows.values()).sort((left, right) =>
+        left.minute.localeCompare(right.minute) ||
+        left.source.localeCompare(right.source) ||
+        left.species.localeCompare(right.species)
+      );
+    }}
+    function applyTimeResolution() {{
+      const select = document.getElementById('time-resolution');
+      const resolution = Number(select.value);
+      const [rangeStart, rangeEnd] = visibleTimeRange();
+      tableRows = aggregateRows(resolution);
+      const rowsBySeries = new Map();
+      tableRows.forEach(row => {{
+        const key = seriesKey(row.source, row.species);
+        if (!rowsBySeries.has(key)) rowsBySeries.set(key, []);
+        rowsBySeries.get(key).push(row);
+      }});
+      const x = [];
+      const y = [];
+      const customdata = [];
+      traceFilters.forEach(filter => {{
+        const items = rowsBySeries.get(seriesKey(filter.source, filter.species)) || [];
+        x.push(items.map(row => row.minute));
+        y.push(items.map(row => row.count));
+        customdata.push(items.map(row => [row.source, row.species]));
+      }});
+      selectedTableKeys = null;
+      chartElement.data.forEach(trace => {{ trace.selectedpoints = null; }});
+      const axisTitle = tableLabels.resolutionAxis.replace('{{resolution}}', select.options[select.selectedIndex].text);
+      const layoutUpdate = {{'xaxis.title.text': axisTitle, selections: []}};
+      if (rangeStart !== null && rangeEnd !== null) {{
+        layoutUpdate['xaxis.range'] = [new Date(rangeStart), new Date(rangeEnd)];
+      }}
+      return Plotly.restyle(chartElement, {{x, y, customdata}})
+        .then(() => Plotly.relayout(chartElement, layoutUpdate))
+        .then(updateMarkerBadges)
+        .then(renderTable);
     }}
     function visibleSeries() {{
       const result = new Set();
@@ -373,15 +460,16 @@ def build_chart_html(counts: Iterable[MinuteCount], title: str, language: str = 
       const activeSources = selected('source');
       const activeSpecies = selected('species');
       const visible = traceFilters.map(item => activeSources.has(item.source) && activeSpecies.has(item.species));
-      Plotly.restyle(chartElement, {{visible: visible}})
+      return Plotly.restyle(chartElement, {{visible: visible}})
         .then(updateMarkerBadges)
         .then(renderTable);
     }}
-    document.querySelectorAll('input[data-filter]').forEach(input => input.addEventListener('change', applyFilters));
+    document.querySelectorAll('input[data-filter]').forEach(input => input.addEventListener('change', () => runWithLoading(applyFilters)));
+    document.getElementById('time-resolution').addEventListener('change', () => runWithLoading(applyTimeResolution));
     document.querySelectorAll('button[data-action]').forEach(button => button.addEventListener('click', () => {{
       const checked = button.dataset.action === 'all';
       document.querySelectorAll(`input[data-filter="${{button.dataset.group}}"]`).forEach(input => input.checked = checked);
-      applyFilters();
+      runWithLoading(applyFilters);
     }}));
     document.getElementById('export-png').addEventListener('click', () => {{
       Plotly.downloadImage(chartElement, {{
