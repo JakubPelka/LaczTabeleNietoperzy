@@ -1,7 +1,7 @@
 # Parallel Bat Graph
 
 Niezależna aplikacja do porównywania rejestracji nietoperzy z dowolnej liczby
-arkuszy Excel. Program agreguje wpisy z kolumny `MANUAL ID` do pełnych minut i
+plików XLSX i CSV. Program agreguje wpisy z kolumny `MANUAL ID` do pełnych minut i
 tworzy samodzielny, interaktywny wykres HTML.
 
 Projekt nie modyfikuje plików wejściowych ani istniejącego narzędzia
@@ -9,7 +9,7 @@ Projekt nie modyfikuje plików wejściowych ani istniejącego narzędzia
 
 ## Najważniejsze funkcje
 
-- dowolna liczba źródeł `.xlsx`;
+- dowolna liczba źródeł `.xlsx` i `.csv`;
 - interfejs i wykres w języku polskim, angielskim lub szwedzkim;
 - edytowalne nazwy źródeł;
 - agregacja `minuta × źródło × MANUAL ID`;
@@ -30,15 +30,18 @@ Projekt nie modyfikuje plików wejściowych ani istniejącego narzędzia
 
 ## Wymagania danych
 
-Program wyszukuje w skoroszycie arkusz i wiersz nagłówkowy zawierający:
+Program wyszukuje w skoroszycie XLSX arkusz albo w pliku CSV wiersz nagłówkowy
+zawierający:
 
 - `DATE` — data rejestracji;
 - `TIME` — czas rejestracji;
 - `MANUAL ID` — końcowa klasyfikacja gatunku lub zachowania.
 
 Nagłówki mogą znajdować się w jednym z pierwszych 50 wierszy. Pozostałe kolumny
-nie wpływają na analizę. Program obsługuje daty i czasy zapisane jako wartości
-Excela oraz najczęściej spotykane wartości tekstowe.
+nie wpływają na analizę. CSV może używać przecinka, średnika, tabulatora lub
+znaku `|` jako separatora oraz kodowania UTF-8 albo Windows-1252. Program
+obsługuje daty i czasy zapisane jako wartości Excela oraz najczęściej spotykane
+wartości tekstowe.
 
 ## Przygotowanie i uruchomienie offline (także z USB)
 
@@ -81,7 +84,7 @@ dla Windows powinien zawierać opcjonalny komponent Tcl/Tk.
 
 ## Obsługa
 
-1. Kliknij **Dodaj pliki Excel…** i wybierz wszystkie porównywane pliki.
+1. Kliknij **Dodaj pliki XLSX / CSV…** i wybierz wszystkie porównywane pliki.
 2. W prawym górnym rogu wybierz `Polski`, `English` albo `Svenska`.
 3. W razie potrzeby zmień nazwy źródeł w lewej kolumnie listy.
 4. Wybierz folder docelowy.

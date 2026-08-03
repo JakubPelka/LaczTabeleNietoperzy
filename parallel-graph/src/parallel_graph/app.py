@@ -103,7 +103,9 @@ class ParallelGraphApp:
         selected = filedialog.askopenfilenames(
             title=tr(self._language(), "file_dialog_title"),
             filetypes=[
+                (tr(self._language(), "input_files"), "*.xlsx *.csv"),
                 (tr(self._language(), "excel_files"), "*.xlsx"),
+                (tr(self._language(), "csv_files"), "*.csv"),
                 (tr(self._language(), "all_files"), "*.*"),
             ],
         )

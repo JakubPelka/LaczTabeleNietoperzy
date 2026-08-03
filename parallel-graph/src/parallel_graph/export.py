@@ -50,7 +50,7 @@ def generate_outputs(
     sources: list[SourceSpec], output_directory: Path, language: str = "pl"
 ) -> tuple[list[Path], list[ImportReport]]:
     if not sources:
-        raise ValueError("Wybierz co najmniej jeden plik Excel.")
+        raise ValueError("Wybierz co najmniej jeden plik XLSX lub CSV.")
     names = [source.name.strip() for source in sources]
     if any(not name for name in names):
         raise ValueError("Każde źródło musi mieć nazwę.")

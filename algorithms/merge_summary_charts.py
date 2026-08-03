@@ -17,8 +17,13 @@ from openpyxl import load_workbook
 from openpyxl.styles import Alignment, PatternFill, Font, Border, Side
 from openpyxl.utils import get_column_letter
 
+try:
+    from algorithms.input_reader import read_input_table
+except ModuleNotFoundError:  # Direct execution from the algorithms directory.
+    from input_reader import read_input_table
+
 # ================== Gränssnitt (UI) ==================
-TITLE_OPEN = "Välj en eller flera Excel-filer (.xlsx, samma struktur)"
+TITLE_OPEN = "Välj en eller flera XLSX- eller CSV-filer (samma struktur)"
 TITLE_SAVE = "Välj var du vill spara sammanställningen (ange basnamn)"
 DEFAULT_OUT = "sammanstallning_fladdermus.xlsx"
 
@@ -267,8 +272,13 @@ def gui_collect_settings(
 
     def add_files():
         paths = filedialog.askopenfilenames(
-            title="Välj en eller flera Excel-filer",
-            filetypes=[("Excel-filer", "*.xlsx"), ("Alla filer", "*.*")]
+            title="Välj en eller flera XLSX- eller CSV-filer",
+            filetypes=[
+                ("XLSX- och CSV-filer", "*.xlsx *.csv"),
+                ("Excel-filer", "*.xlsx"),
+                ("CSV-filer", "*.csv"),
+                ("Alla filer", "*.*"),
+            ]
         )
         if not paths: return
         for p in paths:
@@ -516,7 +526,7 @@ all_species_latin = set()
 
 for path in input_files:
     sheet_name = safe_sheet_name(path, used_sheet_names)
-    df = pd.read_excel(path, sheet_name=0, engine="openpyxl")
+    df = read_input_table(path)
     sheets_to_write.append((sheet_name, df))
     total_ljud_per_file[sheet_name] = int(len(df))  # inkl. ”Noise”
     nights_per_file[sheet_name] = count_nights(df)
@@ -734,7 +744,7 @@ def _hm_from_any_for_plot(val):
 def _compute_file_ymax(input_file, custom_time_range):
     """Beräknar max staplad topp (per 15-min slot) för en fil – används för global Y-skala."""
     try:
-        df = pd.read_excel(input_file)
+        df = read_input_table(input_file)
         df["species_type_list"] = df["MANUAL ID"].map(extract_species_and_type)
 
         def time_to_interval(val):
@@ -819,7 +829,7 @@ def generate_bat_diagrams(input_files_list, diagrams_root, custom_time_range):
         os.makedirs(output_dir_lines, exist_ok=True)
 
         # Läs och förbered
-        df = pd.read_excel(input_file)
+        df = read_input_table(input_file)
         df["species_type_list"] = df["MANUAL ID"].map(extract_species_and_type)
 
         def time_to_interval(val):
