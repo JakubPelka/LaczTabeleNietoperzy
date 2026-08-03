@@ -62,6 +62,8 @@ LATIN_TO_SV = {
     "Barbastella barbastellus": "Barbastell",
     "Eptesicus nilssonii": "Nordfladdermus",
     "Eptesicus serotinus": "Sydfladdermus",
+    "Cnephaeus nilssonii": "Nordfladdermus",
+    "Cnephaeus serotinus": "Sydfladdermus",
     "Myotis alcathoe": "Nymffladdermus",
     "Myotis bechsteinii": "Bechsteins fladdermus",
     "Myotis brandtii": "Tajgafladdermus",
