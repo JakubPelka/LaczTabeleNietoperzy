@@ -1,6 +1,6 @@
 # LaczTabeleNietoperzy
 
-Narzędzia do łączenia tabel Excel z rejestracjami nietoperzy oraz tworzenia
+Narzędzia do łączenia tabel XLSX i CSV z rejestracjami nietoperzy oraz tworzenia
 zestawień i wykresów. Repozytorium zawiera dwa klasyczne algorytmy Tkinter oraz
 niezależną aplikację `parallel-graph` do interaktywnego porównywania źródeł.
 
@@ -13,7 +13,7 @@ niezależną aplikację `parallel-graph` do interaktywnego porównywania źróde
 
 Oba algorytmy:
 
-- łączą wybrane skoroszyty o zgodnej strukturze;
+- łączą wybrane pliki XLSX i CSV o zgodnej strukturze;
 - tworzą warianty `<nazwa>_NVI.xlsx` i `<nazwa>_ART.xlsx`;
 - podsumowują `MANUAL ID` jako `Socialt`, `Födosökande` lub
   `Förbiflygande`;
@@ -64,7 +64,7 @@ python algorithms/merge_summary_and_nightly_charts.py
 
 ## Dane wejściowe
 
-Pierwszy arkusz każdego pliku powinien zawierać:
+Pierwszy arkusz pliku XLSX lub tabela w pliku CSV powinny zawierać:
 
 - `MANUAL ID` — klasyfikację lub kilka klasyfikacji oddzielonych przecinkiem;
 - `DATE` lub `Datum` — datę;
@@ -79,7 +79,7 @@ Przykłady powinny być syntetyczne lub bezpieczne do publicznego udostępnienia
 ## Parallel Activity — interaktywne porównanie źródeł
 
 Katalog [`parallel-graph`](parallel-graph/) zawiera odrębną aplikację GUI do
-porównywania aktywności z dowolnej liczby skoroszytów Excel. Program odczytuje
+porównywania aktywności z dowolnej liczby plików XLSX i CSV. Program odczytuje
 kolumny `DATE`, `TIME` i `MANUAL ID`, rozdziela klasyfikacje zapisane po
 przecinku, pomija puste wartości oraz `Noise`, a następnie tworzy samodzielny
 interaktywny plik HTML. Dane źródłowe nie są modyfikowane.

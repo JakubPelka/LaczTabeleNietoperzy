@@ -22,6 +22,11 @@ from openpyxl import load_workbook
 from openpyxl.styles import Alignment, PatternFill, Font, Border, Side
 from openpyxl.utils import get_column_letter
 
+try:
+    from algorithms.input_reader import read_input_table
+except ModuleNotFoundError:  # Direct execution from the algorithms directory.
+    from input_reader import read_input_table
+
 # ================== Grundinställningar / etiketter ==================
 DEFAULT_OUT_BASENAME = "sammanstallning_fladdermus"
 
@@ -237,7 +242,12 @@ def gui_collect_settings(default_basename=DEFAULT_OUT_BASENAME):
     lf_in.columnconfigure(0, weight=1); lf_in.rowconfigure(0, weight=1)
     ttk.Button(lf_in, text="Lägg till filer…",
                command=lambda: [files_list.insert(tk.END, p) for p in filedialog.askopenfilenames(
-                   title="Välj Excel-filer", filetypes=[("Excel", "*.xlsx"), ("Alla", "*.*")]
+                   title="Välj XLSX- eller CSV-filer", filetypes=[
+                       ("XLSX- och CSV-filer", "*.xlsx *.csv"),
+                       ("Excel", "*.xlsx"),
+                       ("CSV", "*.csv"),
+                       ("Alla", "*.*"),
+                   ]
                ) or []]).grid(row=0, column=1, sticky="ew", padx=(0,8), pady=(8,4))
     ttk.Button(lf_in, text="Rensa listan", command=lambda: files_list.delete(0, tk.END))\
         .grid(row=1, column=1, sticky="ew", padx=(0,8))
@@ -402,7 +412,7 @@ all_species_latin = set()
 
 for path in input_files:
     sheet_name = safe_sheet_name(path, used_sheet_names)
-    df = pd.read_excel(path, sheet_name=0, engine="openpyxl")
+    df = read_input_table(path)
     sheets_to_write.append((sheet_name, df))
     total_ljud_per_file[sheet_name] = int(len(df))  # inkl. Noise
     nights_per_file[sheet_name] = count_nights(df)
@@ -625,14 +635,14 @@ def _compute_ymax_for_subset(df_subset, custom_time_range):
 def compute_global_ymax_across_files(input_files_list, custom_time_range):
     y_global = 0
     for path in input_files_list:
-        df = pd.read_excel(path)
+        df = read_input_table(path)
         y_global = max(y_global, _compute_ymax_for_subset(df, custom_time_range))
     return max(1, math.ceil(y_global * 1.05))
 
 def compute_global_ymax_across_files_and_nights(input_files_list, custom_time_range):
     y_global = 0
     for path in input_files_list:
-        df_full = pd.read_excel(path)
+        df_full = read_input_table(path)
         date_col = detect_column(df_full, ["date", "datum"])
         time_col = detect_column(df_full, ["time", "tid"])
         if not date_col:
@@ -779,7 +789,7 @@ def generate_summary_diagrams(input_files_list, diagrams_root, custom_time_range
     type_order = ["Socialt", "Födosökande", "Förbiflygande"]
     for input_file in input_files_list:
         stem = os.path.splitext(os.path.basename(input_file))[0]
-        df_full = pd.read_excel(input_file)
+        df_full = read_input_table(input_file)
         base_out = os.path.join(diagrams_root, f"{stem}")
         out_lines  = base_out + "_linjediagram"
         out_stacks = base_out + "_stapeldiagram"
@@ -795,7 +805,7 @@ def generate_pernight_diagrams(input_files_list, diagrams_root, custom_time_rang
     type_order = ["Socialt", "Födosökande", "Förbiflygande"]
     for input_file in input_files_list:
         stem = os.path.splitext(os.path.basename(input_file))[0]
-        df_full = pd.read_excel(input_file)
+        df_full = read_input_table(input_file)
         date_col = detect_column(df_full, ["date", "datum"])
         time_col = detect_column(df_full, ["time", "tid"])
         if not date_col:
