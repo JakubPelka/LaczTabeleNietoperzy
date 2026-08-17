@@ -138,6 +138,10 @@ def extract_species_and_type(manual_id_value):
         elif "SOC" in upper: typ = "Socialt"
         else: typ = "Förbiflygande"
         species = re.sub(r'\b(FOD|SOC)\b', "", entry, flags=re.IGNORECASE).strip(" ,;")
+        if species == "Eptesicus nilssonii":
+            species = "Cnephaeus nilssonii"
+        elif species == "Eptesicus serotinus":
+            species = "Cnephaeus serotinus"
         out.append((species, typ))
     return out
 
