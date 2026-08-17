@@ -107,7 +107,13 @@ def display_label_multiline(latin: str) -> str:
 
 def format_title(species_latin: str, total_count: int, night_label: str | None = None) -> str:
     sv = LATIN_TO_SV.get(species_latin)
-    base = f"{sv} ({species_latin})" if sv else species_latin
+    display_latin = species_latin
+    if species_latin == "Eptesicus nilssonii":
+        display_latin = "Cnephaeus nilssonii"
+    elif species_latin == "Eptesicus serotinus":
+        display_latin = "Cnephaeus serotinus"
+
+    base = f"{sv} ({display_latin})" if sv else display_latin
     if night_label:
         return f"{base} – natt {night_label}, antal observerade beteenden: {int(total_count)}"
     return f"{base}, antal observerade beteenden: {int(total_count)}"

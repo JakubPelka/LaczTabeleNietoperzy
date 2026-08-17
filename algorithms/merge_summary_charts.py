@@ -116,9 +116,15 @@ def display_label_multiline(latin: str) -> str:
 def format_title(species_latin: str, total_count: int) -> str:
     """Titel för artspecifika diagram: '<svenskt> (<latinskt>), antal observerade beteenden: NN'."""
     sv = LATIN_TO_SV.get(species_latin)
+    display_latin = species_latin
+    if species_latin == "Eptesicus nilssonii":
+        display_latin = "Cnephaeus nilssonii"
+    elif species_latin == "Eptesicus serotinus":
+        display_latin = "Cnephaeus serotinus"
+
     if sv:
-        return f"{sv} ({species_latin}), antal observerade beteenden: {int(total_count)}"
-    return f"{species_latin}, antal observerade beteenden: {int(total_count)}"
+        return f"{sv} ({display_latin}), antal observerade beteenden: {int(total_count)}"
+    return f"{display_latin}, antal observerade beteenden: {int(total_count)}"
 
 def extract_species_and_type(manual_id_value):
     """Tolkar fältet MANUAL ID till lista av (art, beteendetyp: Förbiflygande/Socialt/Födosökande)."""
