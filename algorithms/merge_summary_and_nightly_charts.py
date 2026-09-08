@@ -378,207 +378,233 @@ def gui_collect_settings(default_basename=DEFAULT_OUT_BASENAME):
     return settings
 
 # ================== Start: hämta inställningar ==================
-settings = gui_collect_settings()
+def run_analysis(settings: dict):
+    global HEX_NVI_SOC, HEX_NVI_FODO, HEX_NVI_FORBI
+    global HEX_ART_SOC, HEX_ART_FODO, HEX_ART_FORBI
 
-# Indata/utdata
-input_files = settings["input_files"]
-base_dir    = settings["base_dir"]
-base_name   = settings["base_name"]
+    input_files = settings["input_files"]
+    base_dir    = settings["base_dir"]
+    base_name   = settings["base_name"]
 
-results_dir = os.path.join(base_dir, "Results")
-os.makedirs(results_dir, exist_ok=True)
+    results_dir = os.path.join(base_dir, "Results")
+    os.makedirs(results_dir, exist_ok=True)
 
-out_path_nvi = os.path.join(results_dir, f"{base_name}_NVI.xlsx")
-out_path_art = os.path.join(results_dir, f"{base_name}_ART.xlsx")
+    out_path_nvi = os.path.join(results_dir, f"{base_name}_NVI.xlsx")
+    out_path_art = os.path.join(results_dir, f"{base_name}_ART.xlsx")
 
-# Eventuell färg-override
-if settings["colors"]["NVI"]["Socialt"]:       HEX_NVI_SOC   = settings["colors"]["NVI"]["Socialt"]
-if settings["colors"]["NVI"]["Födosökande"]:   HEX_NVI_FODO  = settings["colors"]["NVI"]["Födosökande"]
-if settings["colors"]["NVI"]["Förbiflygande"]: HEX_NVI_FORBI = settings["colors"]["NVI"]["Förbiflygande"]
-if settings["colors"]["ART"]["Socialt"]:       HEX_ART_SOC   = settings["colors"]["ART"]["Socialt"]
-if settings["colors"]["ART"]["Födosökande"]:   HEX_ART_FODO  = settings["colors"]["ART"]["Födosökande"]
-if settings["colors"]["ART"]["Förbiflygande"]: HEX_ART_FORBI = settings["colors"]["ART"]["Förbiflygande"]
+    # Eventuell färg-override
+    colors = settings.get("colors") or {}
+    nvi_colors = colors.get("NVI") or {}
+    art_colors = colors.get("ART") or {}
+    if nvi_colors.get("Socialt"):       HEX_NVI_SOC   = nvi_colors["Socialt"]
+    if nvi_colors.get("Födosökande"):   HEX_NVI_FODO  = nvi_colors["Födosökande"]
+    if nvi_colors.get("Förbiflygande"): HEX_NVI_FORBI = nvi_colors["Förbiflygande"]
+    if art_colors.get("Socialt"):       HEX_ART_SOC   = art_colors["Socialt"]
+    if art_colors.get("Födosökande"):   HEX_ART_FODO  = art_colors["Födosökande"]
+    if art_colors.get("Förbiflygande"): HEX_ART_FORBI = art_colors["Förbiflygande"]
 
-def scheme_table_nvi():
-    return {
-        "Socialt":       fill_from_hex(HEX_NVI_SOC),
-        "Födosökande":   fill_from_hex(HEX_NVI_FODO),
-        "Fodosökande":   fill_from_hex(HEX_NVI_FODO),
-        "Förbiflygande": fill_from_hex(HEX_TABLE_FORBI),
-    }
-def scheme_table_art():
-    return {
-        "Socialt":       fill_from_hex(HEX_ART_SOC),
-        "Födosökande":   fill_from_hex(HEX_ART_FODO),
-        "Fodosökande":   fill_from_hex(HEX_ART_FODO),
-        "Förbiflygande": fill_from_hex(HEX_TABLE_FORBI),
-    }
+    def scheme_table_nvi():
+        return {
+            "Socialt":       fill_from_hex(HEX_NVI_SOC),
+            "Födosökande":   fill_from_hex(HEX_NVI_FODO),
+            "Fodosökande":   fill_from_hex(HEX_NVI_FODO),
+            "Förbiflygande": fill_from_hex(HEX_TABLE_FORBI),
+        }
+    def scheme_table_art():
+        return {
+            "Socialt":       fill_from_hex(HEX_ART_SOC),
+            "Födosökande":   fill_from_hex(HEX_ART_FODO),
+            "Fodosökande":   fill_from_hex(HEX_ART_FODO),
+            "Förbiflygande": fill_from_hex(HEX_TABLE_FORBI),
+        }
 
-# ================== STEG 1: Bygg Excel-översikt (identiskt) ==================
-used_sheet_names = set()
-sheets_to_write = []
-counts_per_file = {}
-total_ljud_per_file = {}
-nights_per_file = {}
-all_species_latin = set()
+    # ================== STEG 1: Bygg Excel-översikt (identiskt) ==================
+    used_sheet_names = set()
+    sheets_to_write = []
+    counts_per_file = {}
+    total_ljud_per_file = {}
+    nights_per_file = {}
+    all_species_latin = set()
 
-for path in input_files:
-    sheet_name = safe_sheet_name(path, used_sheet_names)
-    df = read_input_table(path)
-    sheets_to_write.append((sheet_name, df))
-    total_ljud_per_file[sheet_name] = int(len(df))  # inkl. Noise
-    nights_per_file[sheet_name] = count_nights(df)
+    for path in input_files:
+        sheet_name = safe_sheet_name(path, used_sheet_names)
+        df = read_input_table(path)
+        sheets_to_write.append((sheet_name, df))
+        total_ljud_per_file[sheet_name] = int(len(df))  # inkl. Noise
+        nights_per_file[sheet_name] = count_nights(df)
 
-    if "MANUAL ID" not in df.columns:
-        counts_per_file[sheet_name] = {}
-        continue
+        if "MANUAL ID" not in df.columns:
+            counts_per_file[sheet_name] = {}
+            continue
 
-    df["__list"] = df["MANUAL ID"].map(extract_species_and_type)
-    long = df.explode("__list"); long = long[long["__list"].notna()]
-    if long.empty:
-        counts_per_file[sheet_name] = {}
-        continue
+        df["__list"] = df["MANUAL ID"].map(extract_species_and_type)
+        long = df.explode("__list"); long = long[long["__list"].notna()]
+        if long.empty:
+            counts_per_file[sheet_name] = {}
+            continue
 
-    long[["ArtLatin", "Beteendetyper"]] = pd.DataFrame(long["__list"].tolist(), index=long.index)
-    long = long[long["ArtLatin"].astype(str).str.strip().str.lower() != "noise"]
-    all_species_latin.update(long["ArtLatin"].astype(str).str.strip().tolist())
-    grp = long.groupby(["ArtLatin", "Beteendetyper"]).size()
-    counts_per_file[sheet_name] = {(sp, typ): int(n) for (sp, typ), n in grp.items()}
+        long[["ArtLatin", "Beteendetyper"]] = pd.DataFrame(long["__list"].tolist(), index=long.index)
+        long = long[long["ArtLatin"].astype(str).str.strip().str.lower() != "noise"]
+        all_species_latin.update(long["ArtLatin"].astype(str).str.strip().tolist())
+        grp = long.groupby(["ArtLatin", "Beteendetyper"]).size()
+        counts_per_file[sheet_name] = {(sp, typ): int(n) for (sp, typ), n in grp.items()}
 
-type_order_overview = ["Socialt", "Födosökande", "Förbiflygande"]
-species_sorted_latin = sorted(all_species_latin, key=species_sort_key)
-file_cols = list(counts_per_file.keys())
+    type_order_overview = ["Socialt", "Födosökande", "Förbiflygande"]
+    species_sorted_latin = sorted(all_species_latin, key=species_sort_key)
+    file_cols = list(counts_per_file.keys())
 
-rows_data = []
-for latin in species_sorted_latin:
-    disp = display_label_multiline(latin)
-    for typ in type_order_overview:
-        row = {"Art": disp, "Beteendetyper": typ}
-        for col in file_cols:
-            val = counts_per_file.get(col, {}).get((latin, typ), 0)
-            row[col] = ("" if val == 0 else int(val))
-        rows_data.append(row)
+    rows_data = []
+    for latin in species_sorted_latin:
+        disp = display_label_multiline(latin)
+        for typ in type_order_overview:
+            row = {"Art": disp, "Beteendetyper": typ}
+            for col in file_cols:
+                val = counts_per_file.get(col, {}).get((latin, typ), 0)
+                row[col] = ("" if val == 0 else int(val))
+            rows_data.append(row)
 
-sum_row = {"Art": "", "Beteendetyper": "Fladdermusregistreringar"}
-for col in file_cols: sum_row[col] = int(sum(counts_per_file.get(col, {}).values()))
-rows_data.append(sum_row)
+    sum_row = {"Art": "", "Beteendetyper": "Fladdermusregistreringar"}
+    for col in file_cols: sum_row[col] = int(sum(counts_per_file.get(col, {}).values()))
+    rows_data.append(sum_row)
 
-nights_row = {"Art": "", "Beteendetyper": "Antal nätter"}
-for col in file_cols:
-    n = nights_per_file.get(col)
-    nights_row[col] = ("" if not n else int(n))
-rows_data.append(nights_row)
+    nights_row = {"Art": "", "Beteendetyper": "Antal nätter"}
+    for col in file_cols:
+        n = nights_per_file.get(col)
+        nights_row[col] = ("" if not n else int(n))
+    rows_data.append(nights_row)
 
-per_night_row = {"Art": "", "Beteendetyper": "Antal registreringar / natt"}
-for col in file_cols: per_night_row[col] = ""
-rows_data.append(per_night_row)
+    per_night_row = {"Art": "", "Beteendetyper": "Antal registreringar / natt"}
+    for col in file_cols: per_night_row[col] = ""
+    rows_data.append(per_night_row)
 
-tot_row = {"Art": "", "Beteendetyper": "Total antal ljud"}
-for col in file_cols: tot_row[col] = int(total_ljud_per_file.get(col, 0))
-rows_data.append(tot_row)
+    tot_row = {"Art": "", "Beteendetyper": "Total antal ljud"}
+    for col in file_cols: tot_row[col] = int(total_ljud_per_file.get(col, 0))
+    rows_data.append(tot_row)
 
-overview_df = pd.DataFrame(rows_data, columns=["Art", "Beteendetyper"] + file_cols)
-num_species = len(species_sorted_latin)
+    overview_df = pd.DataFrame(rows_data, columns=["Art", "Beteendetyper"] + file_cols)
+    num_species = len(species_sorted_latin)
 
-def write_overview_to(path_out):
-    with pd.ExcelWriter(path_out, engine="openpyxl") as writer:
-        overview_df.to_excel(writer, sheet_name="Översikt", index=False)
-        for sheet_name, df_orig in sheets_to_write:
-            df_orig.to_excel(writer, sheet_name=sheet_name, index=False)
+    def write_overview_to(path_out):
+        with pd.ExcelWriter(path_out, engine="openpyxl") as writer:
+            overview_df.to_excel(writer, sheet_name="Översikt", index=False)
+            for sheet_name, df_orig in sheets_to_write:
+                df_orig.to_excel(writer, sheet_name=sheet_name, index=False)
 
-def format_overview(path_out, scheme_fills, num_species_rows, file_cols_list):
-    wb = load_workbook(path_out); ws = wb["Översikt"]
-    max_row = ws.max_row; max_col = ws.max_column
-    header_row = 1; data_start = header_row + 1
-    num_species_rows_total = num_species_rows * 3
-    sum_row_idx      = data_start + num_species_rows_total
-    nights_row_idx   = sum_row_idx + 1
-    pernight_row_idx = nights_row_idx + 1
-    total_row_idx    = pernight_row_idx + 1
+    def format_overview(path_out, scheme_fills, num_species_rows, file_cols_list):
+        wb = load_workbook(path_out); ws = wb["Översikt"]
+        max_row = ws.max_row; max_col = ws.max_column
+        header_row = 1; data_start = header_row + 1
+        num_species_rows_total = num_species_rows * 3
+        sum_row_idx      = data_start + num_species_rows_total
+        nights_row_idx   = sum_row_idx + 1
+        pernight_row_idx = nights_row_idx + 1
+        total_row_idx    = pernight_row_idx + 1
 
-    # rubriker
-    for c in range(1, max_col + 1):
-        cell = ws.cell(row=header_row, column=c)
-        cell.fill = FILL_HDR; cell.font = Font(color=hex_to_argb(HEX_HEADER_FG), bold=True)
-        cell.alignment = Alignment(vertical="center", horizontal="center")
-    ws.row_dimensions[header_row].height = 18
-
-    # kolumnbredder
-    ws.column_dimensions["A"].width = 44; ws.column_dimensions["B"].width = 24
-    for idx, col_name in enumerate(file_cols_list, start=3):
-        header_text = str(col_name)
-        ws.column_dimensions[get_column_letter(idx)].width = max(12, min(50, int(len(header_text) * 1.1)))
-
-    # slå ihop artetiketter (block om 3 rader)
-    if num_species_rows_total > 0:
-        current = data_start; merge_end_limit = sum_row_idx - 1
-        while current <= merge_end_limit:
-            art_val = ws[f"A{current}"].value
-            if not art_val: current += 1; continue
-            end = current
-            while end + 1 <= merge_end_limit and ws[f"A{end+1}"].value == art_val:
-                end += 1
-            if end > current:
-                ws.merge_cells(start_row=current, start_column=1, end_row=end, end_column=1)
-            ws.cell(row=current, column=1).alignment = Alignment(vertical="center", wrap_text=True)
-            current = end + 1
-
-    # färg rader per typ
-    for r in range(data_start, sum_row_idx):
-        typ = ws.cell(row=r, column=2).value
-        fill = scheme_fills.get(typ)
-        if fill:
-            ws.cell(row=r, column=2).fill = fill
-            for c in range(3, max_col + 1):
-                val = ws.cell(row=r, column=c).value
-                if val not in (None, "", 0): ws.cell(row=r, column=c).fill = fill
-
-    # summeringsrader (bold)
-    for r in (sum_row_idx, nights_row_idx, pernight_row_idx, total_row_idx):
+        # rubriker
         for c in range(1, max_col + 1):
-            ws.cell(row=r, column=c).font = Font(bold=True)
-            ws.cell(row=r, column=c).alignment = Alignment(vertical="center")
+            cell = ws.cell(row=header_row, column=c)
+            cell.fill = FILL_HDR; cell.font = Font(color=hex_to_argb(HEX_HEADER_FG), bold=True)
+            cell.alignment = Alignment(vertical="center", horizontal="center")
+        ws.row_dimensions[header_row].height = 18
 
-    # formel
-    for col_idx in range(3, max_col + 1):
-        L = get_column_letter(col_idx)
-        cell = ws.cell(row=pernight_row_idx, column=col_idx)
-        cell.value = f'=IFERROR({L}{sum_row_idx}/{L}{nights_row_idx},"")'
-        cell.number_format = "0.0"
+        # kolumnbredder
+        ws.column_dimensions["A"].width = 44; ws.column_dimensions["B"].width = 24
+        for idx, col_name in enumerate(file_cols_list, start=3):
+            header_text = str(col_name)
+            ws.column_dimensions[get_column_letter(idx)].width = max(12, min(50, int(len(header_text) * 1.1)))
 
-    # blocklinjer
-    for i in range(num_species_rows):
-        top_row = data_start + i * 3
+        # slå ihop artetiketter (block om 3 rader)
+        if num_species_rows_total > 0:
+            current = data_start; merge_end_limit = sum_row_idx - 1
+            while current <= merge_end_limit:
+                art_val = ws[f"A{current}"].value
+                if not art_val: current += 1; continue
+                end = current
+                while end + 1 <= merge_end_limit and ws[f"A{end+1}"].value == art_val:
+                    end += 1
+                if end > current:
+                    ws.merge_cells(start_row=current, start_column=1, end_row=end, end_column=1)
+                ws.cell(row=current, column=1).alignment = Alignment(vertical="center", wrap_text=True)
+                current = end + 1
+
+        # färg rader per typ
+        for r in range(data_start, sum_row_idx):
+            typ = ws.cell(row=r, column=2).value
+            fill = scheme_fills.get(typ)
+            if fill:
+                ws.cell(row=r, column=2).fill = fill
+                for c in range(3, max_col + 1):
+                    val = ws.cell(row=r, column=c).value
+                    if val not in (None, "", 0): ws.cell(row=r, column=c).fill = fill
+
+        # summeringsrader (bold)
+        for r in (sum_row_idx, nights_row_idx, pernight_row_idx, total_row_idx):
+            for c in range(1, max_col + 1):
+                ws.cell(row=r, column=c).font = Font(bold=True)
+                ws.cell(row=r, column=c).alignment = Alignment(vertical="center")
+
+        # formel
+        for col_idx in range(3, max_col + 1):
+            L = get_column_letter(col_idx)
+            cell = ws.cell(row=pernight_row_idx, column=col_idx)
+            cell.value = f'=IFERROR({L}{sum_row_idx}/{L}{nights_row_idx},"")'
+            cell.number_format = "0.0"
+
+        # blocklinjer
+        for i in range(num_species_rows):
+            top_row = data_start + i * 3
+            for c in range(1, max_col + 1):
+                old = ws.cell(row=top_row, column=c).border
+                ws.cell(row=top_row, column=c).border = Border(left=old.left, right=old.right, top=BORDER_MEDIUM, bottom=old.bottom)
         for c in range(1, max_col + 1):
-            old = ws.cell(row=top_row, column=c).border
-            ws.cell(row=top_row, column=c).border = Border(left=old.left, right=old.right, top=BORDER_MEDIUM, bottom=old.bottom)
-    for c in range(1, max_col + 1):
-        old = ws.cell(row=sum_row_idx, column=c).border
-        ws.cell(row=sum_row_idx, column=c).border = Border(left=old.left, right=old.right, top=BORDER_MEDIUM, bottom=old.bottom)
-        old = ws.cell(row=total_row_idx, column=c).border
-        ws.cell(row=total_row_idx, column=c).border = Border(left=old.left, right=BORDER_MEDIUM, top=old.top, bottom=BORDER_MEDIUM)
+            old = ws.cell(row=sum_row_idx, column=c).border
+            ws.cell(row=sum_row_idx, column=c).border = Border(left=old.left, right=old.right, top=BORDER_MEDIUM, bottom=old.bottom)
+            old = ws.cell(row=total_row_idx, column=c).border
+            ws.cell(row=total_row_idx, column=c).border = Border(left=old.left, right=BORDER_MEDIUM, top=old.top, bottom=BORDER_MEDIUM)
 
-    # vertikala avgränsningar
-    for c in range(3, max_col + 1):
+        # vertikala avgränsningar
+        for c in range(3, max_col + 1):
+            for r in range(header_row, max_row + 1):
+                old = ws.cell(row=r, column=c).border
+                ws.cell(row=r, column=c).border = Border(left=BORDER_MEDIUM, right=old.right, top=old.top, bottom=old.bottom)
         for r in range(header_row, max_row + 1):
-            old = ws.cell(row=r, column=c).border
-            ws.cell(row=r, column=c).border = Border(left=BORDER_MEDIUM, right=old.right, top=old.top, bottom=old.bottom)
-    for r in range(header_row, max_row + 1):
-        oldA = ws.cell(row=r, column=1).border
-        ws.cell(row=r, column=1).border = Border(left=BORDER_MEDIUM, right=oldA.right, top=oldA.top, bottom=oldA.bottom)
-        oldB = ws.cell(row=r, column=2).border
-        ws.cell(row=r, column=2).border = Border(left=BORDER_MEDIUM, right=oldB.right, top=oldB.top, bottom=oldB.bottom)
-        oldR = ws.cell(row=r, column=max_col).border
-        ws.cell(row=r, column=max_col).border = Border(left=oldR.left, right=BORDER_MEDIUM, top=oldR.top, bottom=oldR.bottom)
+            oldA = ws.cell(row=r, column=1).border
+            ws.cell(row=r, column=1).border = Border(left=BORDER_MEDIUM, right=oldA.right, top=oldA.top, bottom=oldA.bottom)
+            oldB = ws.cell(row=r, column=2).border
+            ws.cell(row=r, column=2).border = Border(left=BORDER_MEDIUM, right=oldB.right, top=oldB.top, bottom=oldB.bottom)
+            oldR = ws.cell(row=r, column=max_col).border
+            ws.cell(row=r, column=max_col).border = Border(left=oldR.left, right=BORDER_MEDIUM, top=oldR.top, bottom=BORDER_MEDIUM)
 
-    wb.save(path_out); wb.close()
+        wb.save(path_out); wb.close()
 
-# Skriv båda filer
-write_overview_to(out_path_nvi); format_overview(out_path_nvi, scheme_table_nvi(), num_species, file_cols)
-print(f"Klar! Sparad fil (NVI): {out_path_nvi}")
-write_overview_to(out_path_art); format_overview(out_path_art, scheme_table_art(), num_species, file_cols)
-print(f"Klar! Sparad fil (ART): {out_path_art}")
-open_file(out_path_nvi); open_file(out_path_art)
+    # Skriv båda filer
+    write_overview_to(out_path_nvi); format_overview(out_path_nvi, scheme_table_nvi(), num_species, file_cols)
+    print(f"Klar! Sparad fil (NVI): {out_path_nvi}")
+    write_overview_to(out_path_art); format_overview(out_path_art, scheme_table_art(), num_species, file_cols)
+    print(f"Klar! Sparad fil (ART): {out_path_art}")
+
+    if settings.get("open_files", True):
+        open_file(out_path_nvi); open_file(out_path_art)
+
+    # ================== Uruchom tworzenie wykresów (jeśli wybrano) ==================
+    if settings.get("do_plots_summary") or settings.get("do_plots_pernight"):
+        diagrams_base = settings.get("diagram_base") or results_dir
+        diagrams_root = os.path.join(diagrams_base, "diagramer")
+        os.makedirs(diagrams_root, exist_ok=True)
+        print(f"Resultat kommer att sparas i: {diagrams_root}")
+
+        if settings.get("do_plots_summary"):
+            generate_summary_diagrams(
+                input_files_list=input_files,
+                diagrams_root=diagrams_root,
+                custom_time_range=settings.get("custom_time_range"),
+            )
+        if settings.get("do_plots_pernight"):
+            generate_pernight_diagrams(
+                input_files_list=input_files,
+                diagrams_root=diagrams_root,
+                custom_time_range=settings.get("custom_time_range"),
+            )
 
 # ================== STEG 2: Diagram (linje + stapel) ==================
 def _compute_ymax_for_subset(df_subset, custom_time_range):
@@ -840,22 +866,41 @@ def generate_pernight_diagrams(input_files_list, diagrams_root, custom_time_rang
             _plot_for_subset(sub, custom_time_range, y_lim, out_lines, out_stacks,
                              colors_art, colors_nvi, type_order, night_label=night_lab)
 
-# ================== Uruchom tworzenie wykresów (jeśli wybrano) ==================
-if settings["do_plots_summary"] or settings["do_plots_pernight"]:
-    diagrams_base = settings["diagram_base"] or results_dir
-    diagrams_root = os.path.join(diagrams_base, "diagramer")
-    os.makedirs(diagrams_root, exist_ok=True)
-    print(f"Resultat kommer att sparas i: {diagrams_root}")
+if __name__ == "__main__":
+    import argparse
+    parser = argparse.ArgumentParser(description="Merge bat tables and create charts.")
+    parser.add_argument("--headless", action="store_true", help="Run without GUI")
+    parser.add_argument("--input-files", nargs="+", help="Input XLSX or CSV files")
+    parser.add_argument("--base-dir", help="Base output directory")
+    parser.add_argument("--base-name", default=DEFAULT_OUT_BASENAME, help="Output base name")
+    parser.add_argument("--no-plots-summary", action="store_true", help="Skip summary plots")
+    parser.add_argument("--no-plots-pernight", action="store_true", help="Skip per-night plots")
+    parser.add_argument("--time-start", help="Custom start time HH:MM")
+    parser.add_argument("--time-end", help="Custom end time HH:MM")
+    parser.add_argument("--no-open", action="store_true", help="Do not open files after processing")
 
-    if settings["do_plots_summary"]:
-        generate_summary_diagrams(
-            input_files_list=input_files,
-            diagrams_root=diagrams_root,
-            custom_time_range=settings["custom_time_range"],
-        )
-    if settings["do_plots_pernight"]:
-        generate_pernight_diagrams(
-            input_files_list=input_files,
-            diagrams_root=diagrams_root,
-            custom_time_range=settings["custom_time_range"],
-        )
+    args, _ = parser.parse_known_args()
+
+    if args.headless or args.input_files:
+        custom_time_range = None
+        if args.time_start and args.time_end:
+            custom_time_range = (args.time_start, args.time_end)
+
+        settings = {
+            "input_files": [os.path.abspath(f) for f in (args.input_files or [])],
+            "base_dir": os.path.abspath(args.base_dir) if args.base_dir else os.getcwd(),
+            "base_name": args.base_name,
+            "custom_time_range": custom_time_range,
+            "diagram_base": os.path.abspath(args.base_dir) if args.base_dir else os.getcwd(),
+            "do_plots_summary": not args.no_plots_summary,
+            "do_plots_pernight": not args.no_plots_pernight,
+            "colors": {
+                "NVI": {"Socialt": None, "Födosökande": None, "Förbiflygande": None},
+                "ART": {"Socialt": None, "Födosökande": None, "Förbiflygande": None},
+            },
+            "open_files": not args.no_open and not args.headless,
+        }
+        run_analysis(settings)
+    else:
+        settings = gui_collect_settings()
+        run_analysis(settings)
