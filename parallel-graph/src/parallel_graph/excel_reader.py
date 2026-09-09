@@ -23,7 +23,7 @@ def validate_hhmm(val: str | None) -> tuple[int, int] | None:
     if val is None or not str(val).strip():
         return None
     s = str(val).strip()
-    match = re.fullmatch(r"([0-1]?[0-9]|2[0-3]):([0-5][0-9])", s)
+    match = re.fullmatch(r"([0-1][0-9]|2[0-3]):([0-5][0-9])", s)
     if not match:
         raise ValueError(f"Invalid time format '{val}'. Expected HH:MM in 24-hour format.")
     return int(match.group(1)), int(match.group(2))

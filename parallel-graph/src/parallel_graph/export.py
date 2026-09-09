@@ -35,7 +35,7 @@ def _write_report(path: Path, reports: list[ImportReport], counts: list[MinuteCo
     for report in reports:
         lines.extend([
             f"[{report.source}]",
-            f"{tr(language, 'file')}: {report.path}",
+            f"{tr(language, 'file')}: {report.path.name}",
             f"{tr(language, 'sheet')}: {report.sheet}",
             f"{tr(language, 'loaded')}: {report.registrations_loaded}",
             f"{tr(language, 'blank_skipped')}: {report.blank_species_skipped}",

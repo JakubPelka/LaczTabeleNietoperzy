@@ -155,22 +155,23 @@ def validate_hhmm(val: str | None) -> tuple[int, int] | None:
     if val is None or not str(val).strip():
         return None
     s = str(val).strip()
-    match = re.fullmatch(r"([0-1]?[0-9]|2[0-3]):([0-5][0-9])", s)
+    match = re.fullmatch(r"([0-1][0-9]|2[0-3]):([0-5][0-9])", s)
     if not match:
         raise ValueError(f"Invalid time format '{val}'. Expected HH:MM in 24-hour format.")
     return int(match.group(1)), int(match.group(2))
 
 def get_unique_input_stems(input_files: list[str]) -> dict[str, str]:
-    stem_counts = {}
+    used_stems = set()
     result = {}
     for path in input_files:
-        stem = safe_filename(os.path.splitext(os.path.basename(path))[0])
-        if stem not in stem_counts:
-            stem_counts[stem] = 1
-            result[path] = stem
-        else:
-            stem_counts[stem] += 1
-            result[path] = f"{stem}_{stem_counts[stem]}"
+        base_stem = safe_filename(os.path.splitext(os.path.basename(path))[0])
+        cand = base_stem
+        counter = 2
+        while cand in used_stems:
+            cand = f"{base_stem}_{counter}"
+            counter += 1
+        used_stems.add(cand)
+        result[path] = cand
     return result
 
 def _hm_from_any(val):
@@ -633,16 +634,13 @@ def run_analysis(settings: dict):
         from pathlib import Path
         sources = [SourceSpec(path=Path(f), name=unique_stems[f]) for f in input_files]
         custom_time_range = settings.get("custom_time_range")
-        try:
-            generate_outputs(
-                sources=sources,
-                output_directory=Path(combined_dir),
-                language="pl",
-                time_range=custom_time_range,
-            )
-            print(f"Klar! Sparade parallel HTML, CSV och report i {combined_dir}")
-        except Exception as e:
-            print(f"Varning: Kunde inte generera parallel HTML: {e}")
+        generate_outputs(
+            sources=sources,
+            output_directory=Path(combined_dir),
+            language="pl",
+            time_range=custom_time_range,
+        )
+        print(f"Klar! Sparade parallel HTML, CSV och report i {combined_dir}")
 
     if settings.get("open_files", True):
         open_file(out_path_nvi); open_file(out_path_art)

@@ -167,5 +167,57 @@ LaczTabeleNietoperzy/
 └── README.md
 ```
 
-Wyniki powstają w katalogu `Results/` wybranym w GUI. Plików wynikowych nie
-należy commitować.
+Wyniki powstają w katalogu `Results/` wybranym w GUI lub `results/` przy uruchomieniu bezobsługowym. Plików wynikowych nie należy commitować.
+
+## Tryb bezobsługowy (Headless CLI & API)
+
+Algorytm `merge_summary_and_nightly_charts.py` oraz narzędzie `parallel-graph/parallel.py` obsługują uruchamianie w trybie bezobsługowym (headless CLI).
+
+### Przykłady użycia CLI
+
+```bash
+python3 algorithms/merge_summary_and_nightly_charts.py \
+  --headless \
+  --base-dir /path/to/output_directory \
+  --base-name sammanstallning_fladdermus \
+  --time-mode manual \
+  --time-start 21:00 \
+  --time-end 04:30 \
+  --enable-html \
+  --input-files file1.csv file2.csv
+```
+
+Opcje CLI:
+- `--headless`: Uruchomienie bez interfejsu GUI Tkinter.
+- `--base-dir`: Katalog wyjściowy dla wyników.
+- `--base-name`: Nazwa bazowa plików podsumowania Excel (`_NVI.xlsx` / `_ART.xlsx`).
+- `--time-mode`: `manual` (domyślne okno nagrywania, np. `21:00` -> `04:30`) lub `auto` (wyznaczany dynamicznie z danych).
+- `--time-start`: Czas rozpoczęcia w formacie `HH:MM` (dwucyfrowy godzinowo, np. `21:00`).
+- `--time-end`: Czas zakończenia w formacie `HH:MM` (dwucyfrowy godzinowo, np. `04:30`). Zakresy przechodzące przez północ (`stop < start`) są w pełni obsługiwane.
+- `--enable-html`: Generuje interaktywny plik HTML oraz towarzyszący raport CSV i TXT (`parallel_bat_activity.*`).
+
+### Struktura pakietu wyników (Formalized Result Package)
+
+```text
+results/
+  combined/
+    <base_name>_NVI.xlsx
+    <base_name>_ART.xlsx
+    parallel_bat_activity.html        (gdy włączono --enable-html)
+    parallel_bat_activity_data.csv    (gdy włączono --enable-html)
+    parallel_bat_activity_report.txt  (gdy włączono --enable-html)
+  inputs/
+    <input_stem>/
+      summary/
+        line/
+        stacked_ART/
+        stacked_NVI/
+      nights/
+        <night>/
+          line/
+          stacked_ART/
+          stacked_NVI/
+```
+
+Dodatkowa zależność zewnętrzna: `plotly>=5.20` jest wymagana przez moduł Parallel Graph (`requirements.txt`).
+
