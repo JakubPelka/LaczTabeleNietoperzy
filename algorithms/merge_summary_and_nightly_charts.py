@@ -151,6 +151,28 @@ def safe_filename(s):
     return re.sub(r'[\\/:\*\?"<>\|]', '_', str(s))
 
 # --- Tidshjälp ---
+def validate_hhmm(val: str | None) -> tuple[int, int] | None:
+    if val is None or not str(val).strip():
+        return None
+    s = str(val).strip()
+    match = re.fullmatch(r"([0-1]?[0-9]|2[0-3]):([0-5][0-9])", s)
+    if not match:
+        raise ValueError(f"Invalid time format '{val}'. Expected HH:MM in 24-hour format.")
+    return int(match.group(1)), int(match.group(2))
+
+def get_unique_input_stems(input_files: list[str]) -> dict[str, str]:
+    stem_counts = {}
+    result = {}
+    for path in input_files:
+        stem = safe_filename(os.path.splitext(os.path.basename(path))[0])
+        if stem not in stem_counts:
+            stem_counts[stem] = 1
+            result[path] = stem
+        else:
+            stem_counts[stem] += 1
+            result[path] = f"{stem}_{stem_counts[stem]}"
+    return result
+
 def _hm_from_any(val):
     try:
         if val is None or (isinstance(val, float) and pd.isna(val)) or (isinstance(val, str) and val.strip() == ""):
@@ -280,13 +302,16 @@ def gui_collect_settings(default_basename=DEFAULT_OUT_BASENAME):
     lf_plot = ttk.LabelFrame(main, text="Diagram (valfritt)"); lf_plot.pack(fill="x", expand=False, pady=(0,10))
     var_do_plots_summary = tk.BooleanVar(value=True)
     var_do_plots_pernight = tk.BooleanVar(value=True)
+    var_generate_html = tk.BooleanVar(value=False)
     ttk.Checkbutton(lf_plot, text="Generera samlade diagram", variable=var_do_plots_summary)\
         .grid(row=0, column=0, sticky="w", padx=8, pady=(8,4))
     ttk.Checkbutton(lf_plot, text="Generera natt-för-natt diagram", variable=var_do_plots_pernight)\
         .grid(row=0, column=1, sticky="w", padx=8, pady=(8,4))
+    ttk.Checkbutton(lf_plot, text="Generera interaktiv HTML (Parallel Bat Graph)", variable=var_generate_html)\
+        .grid(row=0, column=2, sticky="w", padx=8, pady=(8,4))
 
-    var_time_mode = tk.StringVar(value="auto")
-    var_tstart = tk.StringVar(value="22:00"); var_tend = tk.StringVar(value="02:00")
+    var_time_mode = tk.StringVar(value="manual")
+    var_tstart = tk.StringVar(value="21:00"); var_tend = tk.StringVar(value="04:30")
     ttk.Radiobutton(lf_plot, text="X-axel: automatisk (från data)", value="auto", variable=var_time_mode)\
         .grid(row=1, column=0, sticky="w", padx=8)
     ttk.Radiobutton(lf_plot, text="X-axel: eget intervall", value="manual", variable=var_time_mode)\
@@ -296,7 +321,7 @@ def gui_collect_settings(default_basename=DEFAULT_OUT_BASENAME):
     ttk.Label(lf_plot, text="Sluttid (HH:MM):").grid(row=2, column=2, sticky="e", padx=8, pady=(4,8))
     ent_end = ttk.Entry(lf_plot, textvariable=var_tend, width=10); ent_end.grid(row=2, column=3, sticky="w", pady=(4,8))
 
-    ttk.Label(lf_plot, text="Bas-mapp för diagram (valfritt, default Results/diagramer):").grid(row=3, column=0, sticky="e", padx=8, pady=(0,8))
+    ttk.Label(lf_plot, text="Bas-mapp för diagram (valfritt):").grid(row=3, column=0, sticky="e", padx=8, pady=(0,8))
     var_diagdir = tk.StringVar(value="")
     ttk.Entry(lf_plot, textvariable=var_diagdir).grid(row=3, column=1, sticky="ew", padx=8, pady=(0,8), columnspan=2)
     ttk.Button(lf_plot, text="Välj…", command=lambda: var_diagdir.set(filedialog.askdirectory(title="Välj basmapp") or var_diagdir.get()))\
@@ -350,9 +375,9 @@ def gui_collect_settings(default_basename=DEFAULT_OUT_BASENAME):
         custom_range = None
         if tmode == "manual":
             try:
-                pd.to_datetime(tstart, format="%H:%M"); pd.to_datetime(tend, format="%H:%M")
-            except Exception:
-                messagebox.showerror("GUI", "Felaktigt tidsformat. Använd HH:MM."); return
+                validate_hhmm(tstart); validate_hhmm(tend)
+            except Exception as ex:
+                messagebox.showerror("GUI", f"Felaktigt tidsformat. Använd HH:MM. ({ex})"); return
             custom_range = (tstart, tend)
 
         settings.update({
@@ -363,6 +388,7 @@ def gui_collect_settings(default_basename=DEFAULT_OUT_BASENAME):
             "diagram_base": (var_diagdir.get().strip() or None),
             "do_plots_summary": bool(var_do_plots_summary.get()),
             "do_plots_pernight": bool(var_do_plots_pernight.get()),
+            "generate_html": bool(var_generate_html.get()),
             "colors": {
                 "NVI": {"Socialt": _validate_hex(var_nvi_soc.get()), "Födosökande": _validate_hex(var_nvi_fodo.get()), "Förbiflygande": _validate_hex(var_nvi_forbi.get())},
                 "ART": {"Socialt": _validate_hex(var_art_soc.get()), "Födosökande": _validate_hex(var_art_fodo.get()), "Förbiflygande": _validate_hex(var_art_forbi.get())},
@@ -386,11 +412,18 @@ def run_analysis(settings: dict):
     base_dir    = settings["base_dir"]
     base_name   = settings["base_name"]
 
-    results_dir = os.path.join(base_dir, "Results")
-    os.makedirs(results_dir, exist_ok=True)
+    if os.path.basename(base_dir).lower() == "results":
+        results_dir = base_dir
+    else:
+        results_dir = os.path.join(base_dir, "results")
 
-    out_path_nvi = os.path.join(results_dir, f"{base_name}_NVI.xlsx")
-    out_path_art = os.path.join(results_dir, f"{base_name}_ART.xlsx")
+    combined_dir = os.path.join(results_dir, "combined")
+    inputs_dir = os.path.join(results_dir, "inputs")
+    os.makedirs(combined_dir, exist_ok=True)
+    os.makedirs(inputs_dir, exist_ok=True)
+
+    out_path_nvi = os.path.join(combined_dir, f"{base_name}_NVI.xlsx")
+    out_path_art = os.path.join(combined_dir, f"{base_name}_ART.xlsx")
 
     # Eventuell färg-override
     colors = settings.get("colors") or {}
@@ -417,6 +450,8 @@ def run_analysis(settings: dict):
             "Fodosökande":   fill_from_hex(HEX_ART_FODO),
             "Förbiflygande": fill_from_hex(HEX_TABLE_FORBI),
         }
+
+    unique_stems = get_unique_input_stems(input_files)
 
     # ================== STEG 1: Bygg Excel-översikt (identiskt) ==================
     used_sheet_names = set()
@@ -583,26 +618,51 @@ def run_analysis(settings: dict):
     write_overview_to(out_path_art); format_overview(out_path_art, scheme_table_art(), num_species, file_cols)
     print(f"Klar! Sparad fil (ART): {out_path_art}")
 
+    # Interactive HTML Parallel Bat Graph (optional)
+    if settings.get("generate_html"):
+        try:
+            from parallel_graph.export import generate_outputs
+            from parallel_graph.models import SourceSpec
+        except ModuleNotFoundError:
+            pg_src = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "parallel-graph", "src"))
+            if pg_src not in sys.path:
+                sys.path.insert(0, pg_src)
+            from parallel_graph.export import generate_outputs
+            from parallel_graph.models import SourceSpec
+
+        from pathlib import Path
+        sources = [SourceSpec(path=Path(f), name=unique_stems[f]) for f in input_files]
+        custom_time_range = settings.get("custom_time_range")
+        try:
+            generate_outputs(
+                sources=sources,
+                output_directory=Path(combined_dir),
+                language="pl",
+                time_range=custom_time_range,
+            )
+            print(f"Klar! Sparade parallel HTML, CSV och report i {combined_dir}")
+        except Exception as e:
+            print(f"Varning: Kunde inte generera parallel HTML: {e}")
+
     if settings.get("open_files", True):
         open_file(out_path_nvi); open_file(out_path_art)
 
     # ================== Uruchom tworzenie wykresów (jeśli wybrano) ==================
     if settings.get("do_plots_summary") or settings.get("do_plots_pernight"):
-        diagrams_base = settings.get("diagram_base") or results_dir
-        diagrams_root = os.path.join(diagrams_base, "diagramer")
-        os.makedirs(diagrams_root, exist_ok=True)
-        print(f"Resultat kommer att sparas i: {diagrams_root}")
+        print(f"Resultat kommer att sparas i: {inputs_dir}")
 
         if settings.get("do_plots_summary"):
             generate_summary_diagrams(
                 input_files_list=input_files,
-                diagrams_root=diagrams_root,
+                inputs_dir=inputs_dir,
+                unique_stems=unique_stems,
                 custom_time_range=settings.get("custom_time_range"),
             )
         if settings.get("do_plots_pernight"):
             generate_pernight_diagrams(
                 input_files_list=input_files,
-                diagrams_root=diagrams_root,
+                inputs_dir=inputs_dir,
+                unique_stems=unique_stems,
                 custom_time_range=settings.get("custom_time_range"),
             )
 
@@ -632,6 +692,8 @@ def _compute_ymax_for_subset(df_subset, custom_time_range):
 
     # tidsintervall
     if custom_time_range:
+        validate_hhmm(custom_time_range[0])
+        validate_hhmm(custom_time_range[1])
         min_dt = str_to_dt(custom_time_range[0] + ":00"); max_dt = str_to_dt(custom_time_range[1] + ":00")
         if min_dt is None or max_dt is None: return 0
         min_dt = round_down_15(min_dt); max_dt = round_up_15(max_dt)
@@ -696,7 +758,8 @@ def night_label_str(night_start: date) -> str:
     return f"{night_start.day}/{nxt.day}.{night_start.month:02d}"
 
 def _plot_for_subset(df_subset, custom_time_range, y_lim_global,
-                     out_lines, out_stacks, colors_art, colors_nvi, type_order,
+                     out_lines, out_stacks_art, out_stacks_nvi,
+                     colors_art, colors_nvi, type_order,
                      night_label: str | None = None):
     df = df_subset.copy()
     if "MANUAL ID" not in df.columns: return
@@ -722,6 +785,8 @@ def _plot_for_subset(df_subset, custom_time_range, y_lim_global,
 
     # tidsintervall
     if custom_time_range:
+        validate_hhmm(custom_time_range[0])
+        validate_hhmm(custom_time_range[1])
         min_dt = str_to_dt(custom_time_range[0] + ":00"); max_dt = str_to_dt(custom_time_range[1] + ":00")
         if min_dt is None or max_dt is None: return
         min_dt = round_down_15(min_dt); max_dt = round_up_15(max_dt)
@@ -784,7 +849,6 @@ def _plot_for_subset(df_subset, custom_time_range, y_lim_global,
         plt.savefig(os.path.join(out_lines, f"{safe_filename(species)}.png")); plt.close()
 
     # STAPEL – ART
-    out_stacks_art = out_stacks + "_ART"; os.makedirs(out_stacks_art, exist_ok=True)
     for species in species_list:
         plot_data = (
             agg[agg["species"] == species]
@@ -802,7 +866,6 @@ def _plot_for_subset(df_subset, custom_time_range, y_lim_global,
         plt.savefig(os.path.join(out_stacks_art, f"{safe_filename(species)}.png")); plt.close()
 
     # STAPEL – NVI
-    out_stacks_nvi = out_stacks + "_NVI"; os.makedirs(out_stacks_nvi, exist_ok=True)
     for species in species_list:
         plot_data = (
             agg[agg["species"] == species]
@@ -819,51 +882,60 @@ def _plot_for_subset(df_subset, custom_time_range, y_lim_global,
         plt.xticks(rotation=270); plt.tight_layout(); plt.grid(True, axis='y')
         plt.savefig(os.path.join(out_stacks_nvi, f"{safe_filename(species)}.png")); plt.close()
 
-def generate_summary_diagrams(input_files_list, diagrams_root, custom_time_range):
+def generate_summary_diagrams(input_files_list, inputs_dir, unique_stems, custom_time_range):
     y_lim = compute_global_ymax_across_files(input_files_list, custom_time_range)
     print(f"Global gemensam Y-max (SAMLADE): {y_lim}")
     colors_art = [HEX_ART_SOC, HEX_ART_FODO, HEX_ART_FORBI]
     colors_nvi = [HEX_NVI_SOC, HEX_NVI_FODO, HEX_NVI_FORBI]
     type_order = ["Socialt", "Födosökande", "Förbiflygande"]
     for input_file in input_files_list:
-        stem = os.path.splitext(os.path.basename(input_file))[0]
+        stem = unique_stems[input_file]
         df_full = read_input_table(input_file)
-        base_out = os.path.join(diagrams_root, f"{stem}")
-        out_lines  = base_out + "_linjediagram"
-        out_stacks = base_out + "_stapeldiagram"
+        stem_dir = os.path.join(inputs_dir, stem)
+        out_lines = os.path.join(stem_dir, "summary", "line")
+        out_stacks_art = os.path.join(stem_dir, "summary", "stacked_ART")
+        out_stacks_nvi = os.path.join(stem_dir, "summary", "stacked_NVI")
         os.makedirs(out_lines, exist_ok=True)
-        _plot_for_subset(df_full, custom_time_range, y_lim, out_lines, out_stacks,
+        os.makedirs(out_stacks_art, exist_ok=True)
+        os.makedirs(out_stacks_nvi, exist_ok=True)
+        _plot_for_subset(df_full, custom_time_range, y_lim, out_lines, out_stacks_art, out_stacks_nvi,
                          colors_art, colors_nvi, type_order, night_label=None)
 
-def generate_pernight_diagrams(input_files_list, diagrams_root, custom_time_range):
+def generate_pernight_diagrams(input_files_list, inputs_dir, unique_stems, custom_time_range):
     y_lim = compute_global_ymax_across_files_and_nights(input_files_list, custom_time_range)
     print(f"Global gemensam Y-max (NATT-FÖR-NATT): {y_lim}")
     colors_art = [HEX_ART_SOC, HEX_ART_FODO, HEX_ART_FORBI]
     colors_nvi = [HEX_NVI_SOC, HEX_NVI_FODO, HEX_NVI_FORBI]
     type_order = ["Socialt", "Födosökande", "Förbiflygande"]
     for input_file in input_files_list:
-        stem = os.path.splitext(os.path.basename(input_file))[0]
+        stem = unique_stems[input_file]
         df_full = read_input_table(input_file)
         date_col = detect_column(df_full, ["date", "datum"])
         time_col = detect_column(df_full, ["time", "tid"])
         if not date_col:
-            # brak daty → potraktuj jako jedną „noc”
-            base_out = os.path.join(diagrams_root, f"{stem}__natt_utan_datum")
-            out_lines  = base_out + "_linjediagram"
-            out_stacks = base_out + "_stapeldiagram"
+            stem_dir = os.path.join(inputs_dir, stem)
+            out_lines = os.path.join(stem_dir, "nights", "utan_datum", "line")
+            out_stacks_art = os.path.join(stem_dir, "nights", "utan_datum", "stacked_ART")
+            out_stacks_nvi = os.path.join(stem_dir, "nights", "utan_datum", "stacked_NVI")
             os.makedirs(out_lines, exist_ok=True)
-            _plot_for_subset(df_full, custom_time_range, y_lim, out_lines, out_stacks,
+            os.makedirs(out_stacks_art, exist_ok=True)
+            os.makedirs(out_stacks_nvi, exist_ok=True)
+            _plot_for_subset(df_full, custom_time_range, y_lim, out_lines, out_stacks_art, out_stacks_nvi,
                              colors_art, colors_nvi, type_order, night_label=None)
             continue
         df_full["__night"] = df_full.apply(lambda r: row_night_key(r[date_col], r[time_col] if time_col in r else None), axis=1)
         for night_start, sub in df_full.groupby("__night"):
             if night_start is None or sub.empty: continue
             night_lab = night_label_str(night_start)
-            base_out = os.path.join(diagrams_root, f"{stem}__natt_{night_start.isoformat()}_{(night_start+timedelta(days=1)).isoformat()}")
-            out_lines  = base_out + "_linjediagram"
-            out_stacks = base_out + "_stapeldiagram"
+            night_folder = night_start.isoformat()
+            stem_dir = os.path.join(inputs_dir, stem)
+            out_lines = os.path.join(stem_dir, "nights", night_folder, "line")
+            out_stacks_art = os.path.join(stem_dir, "nights", night_folder, "stacked_ART")
+            out_stacks_nvi = os.path.join(stem_dir, "nights", night_folder, "stacked_NVI")
             os.makedirs(out_lines, exist_ok=True)
-            _plot_for_subset(sub, custom_time_range, y_lim, out_lines, out_stacks,
+            os.makedirs(out_stacks_art, exist_ok=True)
+            os.makedirs(out_stacks_nvi, exist_ok=True)
+            _plot_for_subset(sub, custom_time_range, y_lim, out_lines, out_stacks_art, out_stacks_nvi,
                              colors_art, colors_nvi, type_order, night_label=night_lab)
 
 if __name__ == "__main__":
@@ -875,25 +947,31 @@ if __name__ == "__main__":
     parser.add_argument("--base-name", default=DEFAULT_OUT_BASENAME, help="Output base name")
     parser.add_argument("--no-plots-summary", action="store_true", help="Skip summary plots")
     parser.add_argument("--no-plots-pernight", action="store_true", help="Skip per-night plots")
-    parser.add_argument("--time-start", help="Custom start time HH:MM")
-    parser.add_argument("--time-end", help="Custom end time HH:MM")
+    parser.add_argument("--time-mode", choices=["manual", "auto"], default="manual", help="Time range mode")
+    parser.add_argument("--time-start", default="21:00", help="Custom start time HH:MM")
+    parser.add_argument("--time-end", default="04:30", help="Custom end time HH:MM")
+    parser.add_argument("--enable-html", action="store_true", help="Generate interactive HTML parallel bat graph")
     parser.add_argument("--no-open", action="store_true", help="Do not open files after processing")
 
     args, _ = parser.parse_known_args()
 
     if args.headless or args.input_files:
         custom_time_range = None
-        if args.time_start and args.time_end:
-            custom_time_range = (args.time_start, args.time_end)
+        if args.time_mode == "manual":
+            tstart = args.time_start or "21:00"
+            tend = args.time_end or "04:30"
+            validate_hhmm(tstart)
+            validate_hhmm(tend)
+            custom_time_range = (tstart, tend)
 
         settings = {
             "input_files": [os.path.abspath(f) for f in (args.input_files or [])],
             "base_dir": os.path.abspath(args.base_dir) if args.base_dir else os.getcwd(),
             "base_name": args.base_name,
             "custom_time_range": custom_time_range,
-            "diagram_base": os.path.abspath(args.base_dir) if args.base_dir else os.getcwd(),
             "do_plots_summary": not args.no_plots_summary,
             "do_plots_pernight": not args.no_plots_pernight,
+            "generate_html": args.enable_html,
             "colors": {
                 "NVI": {"Socialt": None, "Födosökande": None, "Förbiflygande": None},
                 "ART": {"Socialt": None, "Födosökande": None, "Förbiflygande": None},
@@ -904,3 +982,4 @@ if __name__ == "__main__":
     else:
         settings = gui_collect_settings()
         run_analysis(settings)
+

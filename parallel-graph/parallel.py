@@ -25,9 +25,25 @@ def show_error(message: str) -> None:
 
 
 def main() -> int:
-    # ``parallel.sh`` installs third-party packages here. Keeping this path
-    # first makes the downloaded copy available to direct offline launches.
     sys.path.insert(0, str(VENDOR_DIR))
+    sys.path.insert(0, str(PROJECT_DIR / "src"))
+
+    if len(sys.argv) > 1:
+        import argparse
+        parser = argparse.ArgumentParser(description="Parallel Bat Graph Headless CLI")
+        parser.add_argument("--input-files", nargs="+", required=True, help="Input XLSX or CSV files")
+        parser.add_argument("--output-dir", required=True, help="Output directory")
+        parser.add_argument("--time-start", help="Start time HH:MM")
+        parser.add_argument("--time-end", help="End time HH:MM")
+        parser.add_argument("--language", default="pl", help="Language (pl, sv, en)")
+        args = parser.parse_args()
+
+        time_range = (args.time_start, args.time_end) if args.time_start and args.time_end else None
+        from parallel_graph.export import generate_outputs
+        from parallel_graph.models import SourceSpec
+        sources = [SourceSpec(path=Path(f), name=Path(f).stem) for f in args.input_files]
+        generate_outputs(sources, Path(args.output_dir), language=args.language, time_range=time_range)
+        return 0
 
     missing = [
         label for module, label in REQUIRED_MODULES.items() if not (VENDOR_DIR / module).exists()
@@ -49,7 +65,6 @@ def main() -> int:
         )
         return 1
 
-    sys.path.insert(0, str(PROJECT_DIR / "src"))
     from parallel_graph.app import main as run_application
 
     run_application()
@@ -58,3 +73,4 @@ def main() -> int:
 
 if __name__ == "__main__":
     raise SystemExit(main())
+

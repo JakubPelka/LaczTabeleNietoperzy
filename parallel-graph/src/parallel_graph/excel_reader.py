@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import csv
 import io
+import re
 from datetime import date, datetime, time, timedelta
 from itertools import chain, islice
 from pathlib import Path
@@ -16,6 +17,31 @@ from .models import ImportReport, Registration, SourceSpec
 
 
 REQUIRED_HEADERS = {"DATE", "TIME", "MANUAL ID"}
+
+
+def validate_hhmm(val: str | None) -> tuple[int, int] | None:
+    if val is None or not str(val).strip():
+        return None
+    s = str(val).strip()
+    match = re.fullmatch(r"([0-1]?[0-9]|2[0-3]):([0-5][0-9])", s)
+    if not match:
+        raise ValueError(f"Invalid time format '{val}'. Expected HH:MM in 24-hour format.")
+    return int(match.group(1)), int(match.group(2))
+
+
+def is_time_in_range(ts: datetime, start_str: str, stop_str: str) -> bool:
+    sh_sm = validate_hhmm(start_str)
+    eh_em = validate_hhmm(stop_str)
+    if not sh_sm or not eh_em:
+        return True
+    t_min = time(sh_sm[0], sh_sm[1])
+    t_max = time(eh_em[0], eh_em[1])
+    t_reg = ts.time()
+    if sh_sm <= eh_em:
+        return t_min <= t_reg <= t_max
+    else:
+        return t_reg >= t_min or t_reg <= t_max
+
 
 
 class WorkbookFormatError(ValueError):

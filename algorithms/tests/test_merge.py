@@ -44,8 +44,8 @@ class HeadlessMergeTests(TestCase):
 
             run_analysis(settings)
 
-            results_dir = out_dir / "Results"
+            results_dir = out_dir / "results" / "combined"
             self.assertTrue(results_dir.exists())
             self.assertTrue((results_dir / "test_output_NVI.xlsx").exists())
             self.assertTrue((results_dir / "test_output_ART.xlsx").exists())
-            self.assertTrue((out_dir / "diagramer").exists())
+            self.assertTrue((out_dir / "results" / "inputs").exists())
