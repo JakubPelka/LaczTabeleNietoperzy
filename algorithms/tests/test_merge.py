@@ -35,7 +35,7 @@ class HeadlessMergeTests(TestCase):
                 "base_dir": str(out_dir),
                 "base_name": "test_output",
                 "custom_time_range": None,
-                "diagram_base": str(out_dir),
+                "diagram_base": None,
                 "do_plots_summary": True,
                 "do_plots_pernight": True,
                 "colors": {},

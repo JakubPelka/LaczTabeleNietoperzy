@@ -165,3 +165,69 @@ class ExternalHeadlessContractTests(TestCase):
                     "generate_html": True,
                     "open_files": False,
                 })
+
+    def test_14_static_chart_filtering_excludes_out_of_window_data(self) -> None:
+        with TemporaryDirectory() as temp_dir:
+            temp_path = Path(temp_dir)
+            bat_file = temp_path / "bat_data.csv"
+            csv_content = (
+                "DATE;TIME;MANUAL ID\n"
+                "2026-07-14;22:15:00;Nyctalus noctula FOD\n"
+                "2026-07-14;14:00:00;Eptesicus nilssonii SOC\n"
+            )
+            bat_file.write_text(csv_content, encoding="utf-8")
+
+            # Manual mode 21:00 -> 04:30
+            run_analysis({
+                "input_files": [str(bat_file)],
+                "base_dir": str(temp_path),
+                "base_name": "test_filtered",
+                "custom_time_range": ("21:00", "04:30"),
+                "do_plots_summary": True,
+                "do_plots_pernight": False,
+                "generate_html": False,
+                "open_files": False,
+            })
+
+            line_dir = temp_path / "results" / "inputs" / "bat_data" / "summary" / "line"
+            self.assertTrue((line_dir / "Nyctalus noctula.png").exists())
+            # Eptesicus nilssonii was at 14:00 (out of window), must NOT be generated
+            self.assertFalse((line_dir / "Cnephaeus nilssonii.png").exists())
+            self.assertFalse((line_dir / "Eptesicus nilssonii.png").exists())
+
+            # Auto mode (None) includes all rows
+            run_analysis({
+                "input_files": [str(bat_file)],
+                "base_dir": str(temp_path),
+                "base_name": "test_auto",
+                "custom_time_range": None,
+                "do_plots_summary": True,
+                "do_plots_pernight": False,
+                "generate_html": False,
+                "open_files": False,
+            })
+            self.assertTrue((line_dir / "Cnephaeus nilssonii.png").exists())
+
+    def test_15_diagram_base_custom_path(self) -> None:
+        with TemporaryDirectory() as temp_dir:
+            temp_path = Path(temp_dir)
+            custom_diagram_dir = temp_path / "custom_inputs"
+            bat_file = temp_path / "bat_data.csv"
+            csv_content = "DATE;TIME;MANUAL ID\n2026-07-14;22:15:00;Nyctalus noctula FOD\n"
+            bat_file.write_text(csv_content, encoding="utf-8")
+
+            run_analysis({
+                "input_files": [str(bat_file)],
+                "base_dir": str(temp_path),
+                "diagram_base": str(custom_diagram_dir),
+                "base_name": "test_diagram_base",
+                "custom_time_range": ("21:00", "04:30"),
+                "do_plots_summary": True,
+                "do_plots_pernight": False,
+                "generate_html": False,
+                "open_files": False,
+            })
+
+            line_dir = custom_diagram_dir / "bat_data" / "summary" / "line"
+            self.assertTrue((line_dir / "Nyctalus noctula.png").exists())
+

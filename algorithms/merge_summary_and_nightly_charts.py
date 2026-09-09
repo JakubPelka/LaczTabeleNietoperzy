@@ -12,7 +12,7 @@ import math
 import subprocess
 import pandas as pd
 import matplotlib.pyplot as plt
-from datetime import datetime, timedelta, date
+from datetime import datetime, timedelta, date, time
 from matplotlib.ticker import MaxNLocator
 
 import tkinter as tk
@@ -159,6 +159,22 @@ def validate_hhmm(val: str | None) -> tuple[int, int] | None:
     if not match:
         raise ValueError(f"Invalid time format '{val}'. Expected HH:MM in 24-hour format.")
     return int(match.group(1)), int(match.group(2))
+
+def is_time_in_range(time_val, start_str: str, stop_str: str) -> bool:
+    hm = _hm_from_any(time_val)
+    if hm is None:
+        return False
+    sh_sm = validate_hhmm(start_str)
+    eh_em = validate_hhmm(stop_str)
+    if not sh_sm or not eh_em:
+        return True
+    t_min = time(sh_sm[0], sh_sm[1])
+    t_max = time(eh_em[0], eh_em[1])
+    t_reg = time(hm[0], hm[1])
+    if sh_sm <= eh_em:
+        return t_min <= t_reg <= t_max
+    else:
+        return t_reg >= t_min or t_reg <= t_max
 
 def get_unique_input_stems(input_files: list[str]) -> dict[str, str]:
     used_stems = set()
@@ -419,7 +435,7 @@ def run_analysis(settings: dict):
         results_dir = os.path.join(base_dir, "results")
 
     combined_dir = os.path.join(results_dir, "combined")
-    inputs_dir = os.path.join(results_dir, "inputs")
+    inputs_dir = settings["diagram_base"] if settings.get("diagram_base") else os.path.join(results_dir, "inputs")
     os.makedirs(combined_dir, exist_ok=True)
     os.makedirs(inputs_dir, exist_ok=True)
 
@@ -669,6 +685,15 @@ def _compute_ymax_for_subset(df_subset, custom_time_range):
     if df_subset.empty: return 0
     df = df_subset.copy()
     if "MANUAL ID" not in df.columns: return 0
+
+    time_col = detect_column(df, ["time", "tid"])
+    if time_col is None: return 0
+
+    if custom_time_range:
+        start_str, stop_str = custom_time_range
+        df = df[df[time_col].apply(lambda t: is_time_in_range(t, start_str, stop_str))]
+        if df.empty: return 0
+
     df["species_type_list"] = df["MANUAL ID"].map(extract_species_and_type)
 
     def time_to_interval(val):
@@ -761,10 +786,16 @@ def _plot_for_subset(df_subset, custom_time_range, y_lim_global,
                      night_label: str | None = None):
     df = df_subset.copy()
     if "MANUAL ID" not in df.columns: return
-    df["species_type_list"] = df["MANUAL ID"].map(extract_species_and_type)
 
     time_col = detect_column(df, ["time", "tid"])
     if time_col is None: return
+
+    if custom_time_range:
+        start_str, stop_str = custom_time_range
+        df = df[df[time_col].apply(lambda t: is_time_in_range(t, start_str, stop_str))]
+        if df.empty: return
+
+    df["species_type_list"] = df["MANUAL ID"].map(extract_species_and_type)
 
     def time_to_interval(val):
         hm = _hm_from_any(val)
