@@ -637,6 +637,8 @@ def run_analysis(settings: dict):
 
     # Interactive HTML Parallel Bat Graph (optional)
     if settings.get("generate_html"):
+        if os.environ.get("TEST_FAIL_HTML_GEN") == "1":
+            raise RuntimeError("Simulated HTML generation failure")
         try:
             from parallel_graph.export import generate_outputs
             from parallel_graph.models import SourceSpec
