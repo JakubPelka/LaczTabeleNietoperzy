@@ -15,6 +15,7 @@ if str(PROJECT_ROOT / "parallel-graph" / "src") not in sys.path:
 from algorithms.merge_summary_and_nightly_charts import (
     validate_hhmm,
     get_unique_input_stems,
+    build_manual_interval_sequence,
     run_analysis,
 )
 from parallel_graph.excel_reader import is_time_in_range
@@ -230,4 +231,52 @@ class ExternalHeadlessContractTests(TestCase):
 
             line_dir = custom_diagram_dir / "bat_data" / "summary" / "line"
             self.assertTrue((line_dir / "Nyctalus noctula.png").exists())
+
+    def test_16_build_manual_interval_sequence_overnight(self) -> None:
+        seq = build_manual_interval_sequence(("21:00", "04:30"))
+        self.assertEqual(seq[0], "21:00")
+        self.assertEqual(seq[-1], "04:30")
+        self.assertIn("23:45", seq)
+        self.assertIn("00:00", seq)
+        self.assertIn("00:15", seq)
+
+        # Order check: 23:45 comes before 00:00, 00:00 comes before 04:30
+        idx_2345 = seq.index("23:45")
+        idx_0000 = seq.index("00:00")
+        idx_0430 = seq.index("04:30")
+        self.assertTrue(idx_2345 < idx_0000 < idx_0430)
+
+        # Same-day range
+        seq_sameday = build_manual_interval_sequence(("18:00", "23:00"))
+        self.assertEqual(seq_sameday[0], "18:00")
+        self.assertEqual(seq_sameday[-1], "23:00")
+        self.assertNotIn("00:00", seq_sameday)
+
+    def test_17_overnight_manual_aggregation_non_empty(self) -> None:
+        with TemporaryDirectory() as temp_dir:
+            temp_path = Path(temp_dir)
+            bat_file = temp_path / "bat_data.csv"
+            # Late-evening record at 22:15 and post-midnight record at 02:30
+            csv_content = (
+                "DATE;TIME;MANUAL ID\n"
+                "2026-07-14;22:15:00;Nyctalus noctula FOD\n"
+                "2026-07-15;02:30:00;Nyctalus noctula SOC\n"
+            )
+            bat_file.write_text(csv_content, encoding="utf-8")
+
+            run_analysis({
+                "input_files": [str(bat_file)],
+                "base_dir": str(temp_path),
+                "base_name": "test_overnight_manual",
+                "custom_time_range": ("21:00", "04:30"),
+                "do_plots_summary": True,
+                "do_plots_pernight": True,
+                "generate_html": False,
+                "open_files": False,
+            })
+
+            line_dir = temp_path / "results" / "inputs" / "bat_data" / "summary" / "line"
+            self.assertTrue((line_dir / "Nyctalus noctula.png").is_file())
+            self.assertTrue((line_dir / "alla_arter.png").is_file())
+
 

@@ -176,6 +176,27 @@ def is_time_in_range(time_val, start_str: str, stop_str: str) -> bool:
     else:
         return t_reg >= t_min or t_reg <= t_max
 
+def build_manual_interval_sequence(custom_time_range: tuple[str, str]) -> list[str]:
+    start_str, stop_str = custom_time_range
+    sh_sm = validate_hhmm(start_str)
+    eh_em = validate_hhmm(stop_str)
+    if not sh_sm or not eh_em:
+        return []
+    start_dt = datetime(2000, 1, 1, sh_sm[0], sh_sm[1])
+    if eh_em < sh_sm:
+        stop_dt = datetime(2000, 1, 2, eh_em[0], eh_em[1])
+    else:
+        stop_dt = datetime(2000, 1, 1, eh_em[0], eh_em[1])
+    min_dt = round_down_15(start_dt)
+    max_dt = round_up_15(stop_dt)
+
+    intervals = []
+    t = min_dt
+    while t <= max_dt:
+        intervals.append(t.strftime("%H:%M"))
+        t += timedelta(minutes=15)
+    return list(dict.fromkeys(intervals))
+
 def get_unique_input_stems(input_files: list[str]) -> dict[str, str]:
     used_stems = set()
     result = {}
@@ -637,7 +658,7 @@ def run_analysis(settings: dict):
 
     # Interactive HTML Parallel Bat Graph (optional)
     if settings.get("generate_html"):
-        if os.environ.get("TEST_FAIL_HTML_GEN") == "1":
+        if os.environ.get("APP_ENV") == "testing" and os.environ.get("TEST_FAIL_HTML_GEN") == "1":
             raise RuntimeError("Simulated HTML generation failure")
         try:
             from parallel_graph.export import generate_outputs
@@ -717,11 +738,7 @@ def _compute_ymax_for_subset(df_subset, custom_time_range):
 
     # tidsintervall
     if custom_time_range:
-        validate_hhmm(custom_time_range[0])
-        validate_hhmm(custom_time_range[1])
-        min_dt = str_to_dt(custom_time_range[0] + ":00"); max_dt = str_to_dt(custom_time_range[1] + ":00")
-        if min_dt is None or max_dt is None: return 0
-        min_dt = round_down_15(min_dt); max_dt = round_up_15(max_dt)
+        all_intervals = build_manual_interval_sequence(custom_time_range)
     else:
         dt_series = df[time_col].apply(str_to_dt).dropna()
         if len(dt_series) == 0:
@@ -733,12 +750,11 @@ def _compute_ymax_for_subset(df_subset, custom_time_range):
         else:
             min_dt = round_down_15(min(dt_series)); max_dt = round_up_15(max(dt_series))
 
-    # lista intervall
-    all_intervals = []
-    t = min_dt
-    while t <= max_dt:
-        all_intervals.append(t.strftime("%H:%M")); t += timedelta(minutes=15)
-    all_intervals = list(dict.fromkeys(all_intervals))
+        all_intervals = []
+        t = min_dt
+        while t <= max_dt:
+            all_intervals.append(t.strftime("%H:%M")); t += timedelta(minutes=15)
+        all_intervals = list(dict.fromkeys(all_intervals))
 
     agg = df_long.groupby(["interval", "species", "obs_type"]).size().reset_index(name="antal")
     agg["interval"] = pd.Categorical(agg["interval"], categories=all_intervals, ordered=True)
@@ -816,11 +832,7 @@ def _plot_for_subset(df_subset, custom_time_range, y_lim_global,
 
     # tidsintervall
     if custom_time_range:
-        validate_hhmm(custom_time_range[0])
-        validate_hhmm(custom_time_range[1])
-        min_dt = str_to_dt(custom_time_range[0] + ":00"); max_dt = str_to_dt(custom_time_range[1] + ":00")
-        if min_dt is None or max_dt is None: return
-        min_dt = round_down_15(min_dt); max_dt = round_up_15(max_dt)
+        all_intervals = build_manual_interval_sequence(custom_time_range)
     else:
         dt_series = df[time_col].apply(str_to_dt).dropna()
         if len(dt_series) == 0:
@@ -832,12 +844,11 @@ def _plot_for_subset(df_subset, custom_time_range, y_lim_global,
         else:
             min_dt = round_down_15(min(dt_series)); max_dt = round_up_15(max(dt_series))
 
-    # lista intervall
-    all_intervals = []
-    t = min_dt
-    while t <= max_dt:
-        all_intervals.append(t.strftime("%H:%M")); t += timedelta(minutes=15)
-    all_intervals = list(dict.fromkeys(all_intervals))
+        all_intervals = []
+        t = min_dt
+        while t <= max_dt:
+            all_intervals.append(t.strftime("%H:%M")); t += timedelta(minutes=15)
+        all_intervals = list(dict.fromkeys(all_intervals))
 
     # Agg
     agg = df_long.groupby(["interval", "species", "obs_type"]).size().reset_index(name="antal")
