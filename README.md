@@ -183,6 +183,7 @@ python3 algorithms/merge_summary_and_nightly_charts.py \
   --time-mode manual \
   --time-start 21:00 \
   --time-end 04:30 \
+  --ymax-mode zoomed \
   --enable-html \
   --input-files file1.csv file2.csv
 ```
@@ -193,8 +194,19 @@ Opcje CLI:
 - `--base-name`: Nazwa bazowa plików podsumowania Excel (`_NVI.xlsx` / `_ART.xlsx`).
 - `--time-mode`: `manual` (domyślne okno nagrywania, np. `21:00` -> `04:30`) lub `auto` (wyznaczany dynamicznie z danych).
 - `--time-start`: Czas rozpoczęcia w formacie `HH:MM` (dwucyfrowy godzinowo, np. `21:00`).
-- `--time-end`: Czas zakończenia w formacie `HH:MM` (dwucyfrowy godzinowo, np. `04:30`). Zakresy przechodzące przez północ (`stop < start`) są w pełni obsługiwane.
+- `--time-end`: Czas zakończenia w formacie `HH:MM` (dwucyfrowy godzinowo, np. `04:30`). Zakresy przechodzące przez północ (`stop < start`) są w fully obsługiwane.
+- `--ymax-mode` / `--y-axis-mode`: `fixed` (domyślny wspólny Y-max w całym zbiorze + 10%) lub `zoomed` (Y-max wyliczany osobno z danych wykresu + 10% zapasu, min 1).
 - `--enable-html`: Generuje interaktywny plik HTML oraz towarzyszący raport CSV i TXT (`parallel_bat_activity.*`).
+
+### Nowe funkcjonalności (#7, #8, #9)
+
+- **#7 Tryb Osi Y**: Wybór pomiędzy `fixed` (stała globalna skala Y) a `zoomed` (dynamiczna skala osi Y dopasowana do faktycznie przedstawionych danych na danym wykresie + 10% nagłówka).
+- **#8 Klasa SOF i kompatybilność**: Rejestracje `SOF` (`socialt - flyg`) oraz `SOC` (`socialt - läte`). Jeśli dataset nie zawiera `SOF`, zachowanie i paleta `SOC` pozostają 100% wstecznie kompatybilne. Przy wykryciu `SOF` w zbiorze, `SOC` przyjmuje nowy domyślny odcień (#9A0B08 NVI / #8D0B82 ART), a `SOF` przejmuje poprzednią barwę `SOC`.
+- **#9 Wykres zbiorczy wszystkich gatunków**: Tworzony jako `alla_arter.png` w podkatalogach `stacked_ART/` i `stacked_NVI/` zarówno dla podsumowania zbiorczego, jak i każdej nocy biologicznej. Zachowuje układy słupków per gatunek w 15-minutowych interwałach oraz pionowe etykiety gatunków.
+
+### Gwarancja bezobsługowości offline (Desktop Offline Guarantee)
+
+Aplikacja Tkinter działa w 100% offline bez żadnych zależności sieciowych, zapytań HTTP ani modułów specyficznych dla Perun Works.
 
 ### Struktura pakietu wyników (Formalized Result Package)
 
@@ -206,18 +218,28 @@ results/
     parallel_bat_activity.html        (gdy włączono --enable-html)
     parallel_bat_activity_data.csv    (gdy włączono --enable-html)
     parallel_bat_activity_report.txt  (gdy włączono --enable-html)
-  inputs/
-    <input_stem>/
-      summary/
+  <input_stem>/
+    summary/
+      line/
+        alla_arter.png
+        <species>.png
+      stacked_ART/
+        alla_arter.png
+        <species>.png
+      stacked_NVI/
+        alla_arter.png
+        <species>.png
+    nights/
+      <night>/
         line/
+          alla_arter.png
+          <species>.png
         stacked_ART/
+          alla_arter.png
+          <species>.png
         stacked_NVI/
-      nights/
-        <night>/
-          line/
-          stacked_ART/
-          stacked_NVI/
+          alla_arter.png
+          <species>.png
 ```
 
 Dodatkowa zależność zewnętrzna: `plotly>=5.20` jest wymagana przez moduł Parallel Graph (`requirements.txt`).
-

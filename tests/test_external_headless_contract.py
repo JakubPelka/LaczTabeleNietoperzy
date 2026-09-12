@@ -279,4 +279,49 @@ class ExternalHeadlessContractTests(TestCase):
             self.assertTrue((line_dir / "Nyctalus noctula.png").is_file())
             self.assertTrue((line_dir / "alla_arter.png").is_file())
 
+    def test_18_evolution_7_8_9_contract(self) -> None:
+        with TemporaryDirectory() as temp_dir:
+            temp_path = Path(temp_dir)
+            bat_file = temp_path / "bat_data.csv"
+            csv_content = (
+                "DATE;TIME;MANUAL ID\n"
+                "2026-07-14;22:15:00;Nyctalus noctula FOD\n"
+                "2026-07-14;22:30:00;Nyctalus noctula SOF\n"
+                "2026-07-15;02:30:00;Myotis daubentonii SOC\n"
+            )
+            bat_file.write_text(csv_content, encoding="utf-8")
+
+            # Run with ymax_mode = zoomed and dataset containing SOF
+            run_analysis({
+                "input_files": [str(bat_file)],
+                "base_dir": str(temp_path),
+                "base_name": "test_ev789",
+                "custom_time_range": ("21:00", "04:30"),
+                "ymax_mode": "zoomed",
+                "do_plots_summary": True,
+                "do_plots_pernight": True,
+                "generate_html": False,
+                "open_files": False,
+            })
+
+            stem_dir = temp_path / "results" / "bat_data"
+            summary_art = stem_dir / "summary" / "stacked_ART"
+            summary_nvi = stem_dir / "summary" / "stacked_NVI"
+
+            # Check new all-species stacked grouped charts (#9)
+            self.assertTrue((summary_art / "alla_arter.png").is_file())
+            self.assertTrue((summary_nvi / "alla_arter.png").is_file())
+
+            # Check per-species stacked charts remain present
+            self.assertTrue((summary_art / "Nyctalus noctula.png").is_file())
+            self.assertTrue((summary_art / "Myotis daubentonii.png").is_file())
+
+            # Check per-night all-species stacked chart
+            nights_dir = stem_dir / "nights"
+            for nd in nights_dir.iterdir():
+                if nd.is_dir():
+                    self.assertTrue((nd / "stacked_ART" / "alla_arter.png").is_file())
+                    self.assertTrue((nd / "stacked_NVI" / "alla_arter.png").is_file())
+
+
 
