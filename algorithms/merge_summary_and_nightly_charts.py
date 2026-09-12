@@ -57,6 +57,21 @@ def fill_from_hex(hex_rgb: str) -> PatternFill:
 
 FILL_HDR = fill_from_hex(HEX_HEADER_BG)
 
+
+def report_progress(pct: int, msg: str) -> None:
+    progress_path_str = os.environ.get("PROGRESS_PATH")
+    if progress_path_str:
+        try:
+            import json
+
+            p = os.path.abspath(progress_path_str)
+            os.makedirs(os.path.dirname(p), exist_ok=True)
+            with open(p, "w", encoding="utf-8") as f:
+                json.dump({"progress": pct, "progress_message": msg}, f)
+        except Exception:
+            pass
+
+
 # =============== Ordbok Latin → Svenska ===============
 LATIN_TO_SV = {
     "Barbastella barbastellus": "Barbastell",
@@ -450,6 +465,9 @@ def run_analysis(settings: dict):
     base_dir    = settings["base_dir"]
     base_name   = settings["base_name"]
 
+    report_progress(20, "Reading source tables")
+
+
     if os.path.basename(base_dir).lower() == "results":
         results_dir = base_dir
     else:
@@ -656,8 +674,11 @@ def run_analysis(settings: dict):
     write_overview_to(out_path_art); format_overview(out_path_art, scheme_table_art(), num_species, file_cols)
     print(f"Klar! Sparad fil (ART): {out_path_art}")
 
+    report_progress(40, "Generating combined NVI/ART workbooks")
+
     # Interactive HTML Parallel Bat Graph (optional)
     if settings.get("generate_html"):
+        report_progress(55, "Generating interactive HTML visualization")
         if os.environ.get("APP_ENV") == "testing" and os.environ.get("TEST_FAIL_HTML_GEN") == "1":
             raise RuntimeError("Simulated HTML generation failure")
         try:
@@ -689,6 +710,7 @@ def run_analysis(settings: dict):
         print(f"Resultat kommer att sparas i: {inputs_dir}")
 
         if settings.get("do_plots_summary"):
+            report_progress(70, "Generating summary static charts")
             generate_summary_diagrams(
                 input_files_list=input_files,
                 inputs_dir=inputs_dir,
@@ -696,12 +718,16 @@ def run_analysis(settings: dict):
                 custom_time_range=settings.get("custom_time_range"),
             )
         if settings.get("do_plots_pernight"):
+            report_progress(85, "Generating per-night static charts")
             generate_pernight_diagrams(
                 input_files_list=input_files,
                 inputs_dir=inputs_dir,
                 unique_stems=unique_stems,
                 custom_time_range=settings.get("custom_time_range"),
             )
+
+    report_progress(95, "Finalizing charts and output tables")
+
 
 # ================== STEG 2: Diagram (linje + stapel) ==================
 def _compute_ymax_for_subset(df_subset, custom_time_range):
