@@ -6,12 +6,13 @@ import pandas as pd
 import pytest
 from pathlib import Path
 
-from algorithms.merge_summary_and_nightly_charts import (
+from algorithms.core import (
+    build_all_species_grouped_data,
+    compute_ymax_with_headroom,
     extract_species_and_type,
     resolve_dataset_class_config,
-    compute_ymax_with_headroom,
-    run_analysis,
 )
+from algorithms.merge_summary_and_nightly_charts import run_analysis
 
 
 def create_synthetic_xlsx(file_path: str, rows: list[dict]):
@@ -19,13 +20,57 @@ def create_synthetic_xlsx(file_path: str, rows: list[dict]):
     df.to_excel(file_path, index=False)
 
 
-def test_issue7_ymax_headroom_calculation():
-    assert compute_ymax_with_headroom(0) == 1
-    assert compute_ymax_with_headroom(-5) == 1
-    assert compute_ymax_with_headroom(1) == 2  # 1 * 1.10 = 1.1 -> ceil(1.1) = 2
-    assert compute_ymax_with_headroom(5) == 6  # 5 * 1.10 = 5.5 -> ceil(5.5) = 6
-    assert compute_ymax_with_headroom(10) == 11  # 10 * 1.10 = 11.0 -> 11
-    assert compute_ymax_with_headroom(20) == 22
+def test_issue7_headroom_fixed_vs_zoomed_semantics():
+    # Fixed mode uses 5% headroom (factor 1.05 default)
+    assert compute_ymax_with_headroom(0, headroom_factor=1.05) == 1
+    assert compute_ymax_with_headroom(-5, headroom_factor=1.05) == 1
+    assert compute_ymax_with_headroom(10, headroom_factor=1.05) == 11  # ceil(10 * 1.05) = 11
+    assert compute_ymax_with_headroom(15, headroom_factor=1.05) == 16  # ceil(15 * 1.05) = ceil(15.75) = 16
+    assert compute_ymax_with_headroom(20, headroom_factor=1.05) == 21  # ceil(20 * 1.05) = 21
+
+    # Zoomed mode uses 10% headroom (factor 1.10)
+    assert compute_ymax_with_headroom(0, headroom_factor=1.10) == 1
+    assert compute_ymax_with_headroom(-5, headroom_factor=1.10) == 1
+    assert compute_ymax_with_headroom(10, headroom_factor=1.10) == 11  # ceil(10 * 1.10) = 11
+    assert compute_ymax_with_headroom(15, headroom_factor=1.10) == 17  # ceil(15 * 1.10) = ceil(16.5) = 17
+    assert compute_ymax_with_headroom(20, headroom_factor=1.10) == 22  # ceil(20 * 1.10) = 22
+
+    # Fixed and zoomed differ where expected
+    assert compute_ymax_with_headroom(15, headroom_factor=1.05) != compute_ymax_with_headroom(15, headroom_factor=1.10)
+    assert compute_ymax_with_headroom(20, headroom_factor=1.05) != compute_ymax_with_headroom(20, headroom_factor=1.10)
+
+
+def test_issue9_all_species_grouped_data_present_species_only():
+    rows = [
+        {"interval": "23:30", "species": "NYCNOC", "obs_type": "Socialt - läte"},
+        {"interval": "23:30", "species": "PLEUAR", "obs_type": "Födosökande"},
+        {"interval": "23:30", "species": "VESMUR", "obs_type": "Förbiflygande"},
+        {"interval": "23:45", "species": "NYCNOC", "obs_type": "Socialt - läte"},
+        {"interval": "23:45", "species": "PLEUAR", "obs_type": "Födosökande"},
+        # VESMUR is absent at 23:45
+    ]
+    df_long = pd.DataFrame(rows)
+    all_intervals = ["23:30", "23:45"]
+    type_order = ["Socialt - läte", "Socialt - flyg", "Födosökande", "Förbiflygande"]
+
+    grouped_items, peak_height = build_all_species_grouped_data(df_long, all_intervals, type_order)
+
+    # Sequence of tuples: (interval, species, class_counts)
+    group_sequence = [(item["interval"], item["species"], item["class_counts"]) for item in grouped_items]
+
+    expected_sequence = [
+        ("23:30", "NYCNOC", {"Socialt - läte": 1}),
+        ("23:30", "PLEUAR", {"Födosökande": 1}),
+        ("23:30", "VESMUR", {"Förbiflygande": 1}),
+        ("23:45", "NYCNOC", {"Socialt - läte": 1}),
+        ("23:45", "PLEUAR", {"Födosökande": 1}),
+    ]
+
+    assert group_sequence == expected_sequence
+    assert len(grouped_items) == 5  # No empty VESMUR bar/slot at 23:45!
+    assert peak_height == 1
+    # Check that 23:45 bin begins only after 23:30 bin species
+    assert [item["interval"] for item in grouped_items] == ["23:30", "23:30", "23:30", "23:45", "23:45"]
 
 
 def test_issue8_sof_parsing_and_extraction():

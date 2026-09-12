@@ -22,6 +22,77 @@ try:
 except ModuleNotFoundError:  # Direct execution from the algorithms directory.
     from input_reader import read_input_table
 
+try:
+    from algorithms.core import (
+        BORDER_MEDIUM,
+        DEFAULT_OUT_BASENAME,
+        FILL_HDR,
+        HEX_HEADER_FG,
+        HEX_NVI_FODO,
+        HEX_ART_FODO,
+        HEX_TABLE_FORBI,
+        LATIN_TO_SV,
+        SPECIAL_TAIL,
+        _hm_from_any,
+        _plot_all_species_grouped_stacked,
+        _validate_hex,
+        build_all_species_grouped_data,
+        build_manual_interval_sequence,
+        compute_global_ymax_across_files,
+        compute_ymax_with_headroom,
+        count_nights,
+        detect_column,
+        display_label_multiline,
+        extract_species_and_type,
+        fill_from_hex,
+        format_title,
+        hex_to_argb,
+        interval_to_sortkey,
+        open_file,
+        resolve_dataset_class_config,
+        round_down_15,
+        round_up_15,
+        safe_filename,
+        safe_sheet_name,
+        species_sort_key,
+        str_to_dt,
+    )
+except ModuleNotFoundError:
+    from core import (
+        BORDER_MEDIUM,
+        DEFAULT_OUT_BASENAME,
+        FILL_HDR,
+        HEX_HEADER_FG,
+        HEX_NVI_FODO,
+        HEX_ART_FODO,
+        HEX_TABLE_FORBI,
+        LATIN_TO_SV,
+        SPECIAL_TAIL,
+        _hm_from_any,
+        _plot_all_species_grouped_stacked,
+        _validate_hex,
+        build_all_species_grouped_data,
+        build_manual_interval_sequence,
+        compute_global_ymax_across_files,
+        compute_ymax_with_headroom,
+        count_nights,
+        detect_column,
+        display_label_multiline,
+        extract_species_and_type,
+        fill_from_hex,
+        format_title,
+        hex_to_argb,
+        interval_to_sortkey,
+        open_file,
+        resolve_dataset_class_config,
+        round_down_15,
+        round_up_15,
+        safe_filename,
+        safe_sheet_name,
+        species_sort_key,
+        str_to_dt,
+    )
+
 # ================== Gränssnitt (UI) ==================
 TITLE_OPEN = "Välj en eller flera XLSX- eller CSV-filer (samma struktur)"
 TITLE_SAVE = "Välj var du vill spara sammanställningen (ange basnamn)"
@@ -49,307 +120,7 @@ HEX_ART_FORBI = "#ABAAA9"  # Förbiflygande (i diagram; i tabell används HEX_TA
 
 # Kantlinjer i Excel
 BORDER_MEDIUM = Side(style="medium", color="FF000000")
-
-def hex_to_argb(hex_rgb: str) -> str:
-    """Konverterar '#RRGGBB' → 'FFRRGGBB' (ARGB) för Excel-färger."""
-    h = hex_rgb.strip().lstrip("#")
-    if len(h) != 6:
-        raise ValueError(f"Ogiltig HEX: {hex_rgb}")
-    return "FF" + h.upper()
-
-def fill_from_hex(hex_rgb: str) -> PatternFill:
-    """Skapar PatternFill från HEX (#RRGGBB)."""
-    return PatternFill("solid", fgColor=hex_to_argb(hex_rgb))
-
 FILL_HDR = fill_from_hex(HEX_HEADER_BG)
-
-# ================== Ordbok: Latin → Svenska ==================
-LATIN_TO_SV = {
-    "Barbastella barbastellus": "Barbastell",
-    "Eptesicus nilssonii": "Nordfladdermus",
-    "Eptesicus serotinus": "Sydfladdermus",
-    "Cnephaeus nilssonii": "Nordfladdermus",
-    "Cnephaeus serotinus": "Sydfladdermus",
-    "Myotis alcathoe": "Nymffladdermus",
-    "Myotis bechsteinii": "Bechsteins fladdermus",
-    "Myotis brandtii": "Tajgafladdermus",
-    "Myotis dasycneme": "Dammfladdermus",
-    "Myotis daubentonii": "Vattenfladdermus",
-    "Myotis myotis": "Större musöra",
-    "Myotis mystacinus": "Mustaschfladdermus",
-    "Myotis nattereri": "Fransfladdermus",
-    "Myotis mystacinus/brandtii": "Mustasch/Tajgafladdermus",
-    "Nyctalus leisleri": "Mindre brunfladdermus",
-    "Nyctalus noctula": "Större brunfladdermus",
-    "Pipistrellus kuhlii": "Parkpipistrell",
-    "Pipistrellus nathusii": "Trollpipistrell",
-    "Pipistrellus pipistrellus": "Sydpipistrell",
-    "Pipistrellus pygmaeus": "Dvärgpipistrell",
-    "Plecotus auritus": "Brunlångöra",
-    "Plecotus austriacus": "Grålångöra",
-    "Vespertilio murinus": "Gråskimlig fladdermus",
-    "Nyctaloid": None,
-    "Chiroptera": None,
-}
-SPECIAL_TAIL = {"nyctaloid", "chiroptera"}  # sorteras sist i artlistor
-
-# ================== Hjälpfunktioner (gemensamma) ==================
-def safe_sheet_name(path: str, used: set) -> str:
-    """Gör kalkylbladsnamn Excel-kompatibelt (max 31 tecken, förbjudna tecken ersätts)."""
-    base = os.path.splitext(os.path.basename(path))[0]
-    base = re.sub(r'[:\\\/\?\*\[\]]', '_', base).strip()[:31] or "Ark"
-    cand = base; i = 2
-    while cand in used or not cand:
-        suf = f"_{i}"
-        cand = (base[: (31 - len(suf))] + suf) if len(base) + len(suf) > 31 else (base + suf)
-        i += 1
-    used.add(cand); return cand
-
-def display_label_multiline(latin: str) -> str:
-    """Returnerar 'Svenskt namn,\\nLatinskt namn' (om känt), annars originaltexten."""
-    latin = str(latin).strip()
-    sv = LATIN_TO_SV.get(latin, None)
-    if sv:
-        return f"{sv.capitalize()},\n{latin}"
-    return latin
-
-def format_title(species_latin: str, total_count: int) -> str:
-    """Titel för artspecifika diagram: '<svenskt> (<latinskt>), antal observerade beteenden: NN'."""
-    sv = LATIN_TO_SV.get(species_latin)
-    display_latin = species_latin
-    if species_latin == "Eptesicus nilssonii":
-        display_latin = "Cnephaeus nilssonii"
-    elif species_latin == "Eptesicus serotinus":
-        display_latin = "Cnephaeus serotinus"
-
-    if sv:
-        return f"{sv} ({display_latin}), antal observerade beteenden: {int(total_count)}"
-    return f"{display_latin}, antal observerade beteenden: {int(total_count)}"
-
-def extract_species_and_type(manual_id_value):
-    """Tolkar fältet MANUAL ID till lista av (art, beteendetyp-kod: FOD/SOC/SOF/FORBI)."""
-    if pd.isna(manual_id_value): return []
-    out = []
-    for raw in str(manual_id_value).split(","):
-        entry = raw.strip()
-        if not entry: continue
-        upper = entry.upper()
-        if "SOF" in upper or "SOCIALT - FLYG" in upper:
-            typ = "SOF"
-        elif "SOC" in upper or "SOCIALT" in upper:
-            typ = "SOC"
-        elif "FOD" in upper or "FÖDOSÖKANDE" in upper or "FODOSOKANDE" in upper:
-            typ = "FOD"
-        else:
-            typ = "FORBI"
-
-        species = re.sub(r'\b(FOD|SOC|SOF|FORBI)\b', "", entry, flags=re.IGNORECASE)
-        species = re.sub(r'(?i)socialt\s*-\s*flyg|socialt\s*-\s*läte|socialt|födosökande|fodosokande|förbiflygande', "", species).strip(" ,;")
-        if species == "Eptesicus nilssonii":
-            species = "Cnephaeus nilssonii"
-        elif species == "Eptesicus serotinus":
-            species = "Cnephaeus serotinus"
-        out.append((species, typ))
-    return out
-
-def resolve_dataset_class_config(input_files_or_dfs, custom_colors=None):
-    """Determine if dataset has SOF and build class names, type order, and color palettes."""
-    has_sof = False
-    for item in input_files_or_dfs:
-        if isinstance(item, (str, os.PathLike)):
-            try:
-                df = read_input_table(item)
-            except Exception:
-                continue
-        else:
-            df = item
-
-        if "MANUAL ID" in df.columns:
-            for val in df["MANUAL ID"].dropna():
-                for _, typ in extract_species_and_type(val):
-                    if typ == "SOF":
-                        has_sof = True
-                        break
-                if has_sof:
-                    break
-        if has_sof:
-            break
-
-    custom_colors = custom_colors or {}
-    nvi_custom = custom_colors.get("NVI") or {}
-    art_custom = custom_colors.get("ART") or {}
-
-    HEX_NVI_SOC_DEFAULT_NO_SOF = "#FF0000"
-    HEX_ART_SOC_DEFAULT_NO_SOF = "#EB09D8"
-    HEX_NVI_SOC_DEFAULT_WITH_SOF = "#9A0B08"
-    HEX_NVI_SOF_DEFAULT          = "#FF0000"
-    HEX_ART_SOC_DEFAULT_WITH_SOF = "#8D0B82"
-    HEX_ART_SOF_DEFAULT          = "#EB09D8"
-    HEX_NVI_FODO_DEF  = "#FFC000"
-    HEX_NVI_FORBI_DEF = "#A9A9A9"
-    HEX_ART_FODO_DEF  = "#D98FD3"
-    HEX_ART_FORBI_DEF = "#ABAAA9"
-
-    if has_sof:
-        type_order = ["Socialt - läte", "Socialt - flyg", "Födosökande", "Förbiflygande"]
-        code_map = {
-            "SOC": "Socialt - läte",
-            "SOF": "Socialt - flyg",
-            "FOD": "Födosökande",
-            "FORBI": "Förbiflygande"
-        }
-        nvi_soc_color = nvi_custom.get("Socialt - läte") or nvi_custom.get("SOC") or nvi_custom.get("Socialt") or HEX_NVI_SOC_DEFAULT_WITH_SOF
-        nvi_sof_color = nvi_custom.get("Socialt - flyg") or nvi_custom.get("SOF") or HEX_NVI_SOF_DEFAULT
-        nvi_fodo_color = nvi_custom.get("Födosökande") or nvi_custom.get("FOD") or HEX_NVI_FODO_DEF
-        nvi_forbi_color = nvi_custom.get("Förbiflygande") or nvi_custom.get("FORBI") or HEX_NVI_FORBI_DEF
-
-        art_soc_color = art_custom.get("Socialt - läte") or art_custom.get("SOC") or art_custom.get("Socialt") or HEX_ART_SOC_DEFAULT_WITH_SOF
-        art_sof_color = art_custom.get("Socialt - flyg") or art_custom.get("SOF") or HEX_ART_SOF_DEFAULT
-        art_fodo_color = art_custom.get("Födosökande") or art_custom.get("FOD") or HEX_ART_FODO_DEF
-        art_forbi_color = art_custom.get("Förbiflygande") or art_custom.get("FORBI") or HEX_ART_FORBI_DEF
-
-        nvi_colors = [nvi_soc_color, nvi_sof_color, nvi_fodo_color, nvi_forbi_color]
-        art_colors = [art_soc_color, art_sof_color, art_fodo_color, art_forbi_color]
-    else:
-        type_order = ["Socialt", "Födosökande", "Förbiflygande"]
-        code_map = {
-            "SOC": "Socialt",
-            "SOF": "Socialt - flyg",
-            "FOD": "Födosökande",
-            "FORBI": "Förbiflygande"
-        }
-        nvi_soc_color = nvi_custom.get("Socialt") or nvi_custom.get("Socialt - läte") or nvi_custom.get("SOC") or HEX_NVI_SOC_DEFAULT_NO_SOF
-        nvi_fodo_color = nvi_custom.get("Födosökande") or nvi_custom.get("FOD") or HEX_NVI_FODO_DEF
-        nvi_forbi_color = nvi_custom.get("Förbiflygande") or nvi_custom.get("FORBI") or HEX_NVI_FORBI_DEF
-
-        art_soc_color = art_custom.get("Socialt") or art_custom.get("Socialt - läte") or art_custom.get("SOC") or HEX_ART_SOC_DEFAULT_NO_SOF
-        art_fodo_color = art_custom.get("Födosökande") or art_custom.get("FOD") or HEX_ART_FODO_DEF
-        art_forbi_color = art_custom.get("Förbiflygande") or art_custom.get("FORBI") or HEX_ART_FORBI_DEF
-
-        nvi_colors = [nvi_soc_color, nvi_fodo_color, nvi_forbi_color]
-        art_colors = [art_soc_color, art_fodo_color, art_forbi_color]
-
-    nvi_color_dict = dict(zip(type_order, nvi_colors))
-    art_color_dict = dict(zip(type_order, art_colors))
-
-    return {
-        "has_sof": has_sof,
-        "type_order": type_order,
-        "code_map": code_map,
-        "colors_art": art_colors,
-        "colors_nvi": nvi_colors,
-        "art_color_dict": art_color_dict,
-        "nvi_color_dict": nvi_color_dict,
-    }
-
-def compute_ymax_with_headroom(max_val: float | int) -> int:
-    """Derive Y max from actual plotted data + 10% headroom, with deterministic min of 1."""
-    if max_val <= 0:
-        return 1
-    return max(1, math.ceil(max_val * 1.10))
-
-def open_file(path):
-    """Försöker öppna fil i OS:et för snabb visuell kontroll."""
-    try:
-        if sys.platform.startswith("win"): os.startfile(path)
-        elif sys.platform == "darwin": subprocess.run(["open", path])
-        else: subprocess.run(["xdg-open", path])
-    except Exception as e:
-        print(f"Kan inte öppna filen automatiskt: {e}")
-
-def species_sort_key(latin: str):
-    """Sorteringsnyckel: A–Ö, men Nyctaloid/Chiroptera alltid sist."""
-    return (str(latin).strip().lower() in SPECIAL_TAIL, str(latin).casefold())
-
-def safe_filename(s):
-    """Gör sträng filnamnssäker (tar bort/ersätter otillåtna tecken)."""
-    return re.sub(r'[\\/:\*\?"<>\|]', '_', str(s))
-
-# --- Tidsparsing (sträng, datetime, Excel-float) ---
-def _hm_from_any(val):
-    """Returnerar (timme, minut) eller None om värdet inte kan tolkas som tid."""
-    try:
-        if val is None or (isinstance(val, float) and pd.isna(val)) or (isinstance(val, str) and val.strip() == ""):
-            return None
-        if hasattr(val, "hour") and hasattr(val, "minute"):
-            return int(val.hour), int(val.minute)
-        if isinstance(val, (int, float)) and not pd.isna(val):
-            frac = float(val) % 1.0
-            secs = int(round(frac * 24 * 60 * 60))
-            h = (secs // 3600) % 24
-            m = (secs % 3600) // 60
-            return int(h), int(m)
-        s = str(val).strip()
-        t = pd.to_datetime(s, format="%H:%M:%S", errors="coerce")
-        if pd.isna(t):
-            t = pd.to_datetime(s, format="%H:%M", errors="coerce")
-        if pd.isna(t):
-            return None
-        return int(t.hour), int(t.minute)
-    except Exception:
-        return None
-
-def str_to_dt(time_val):
-    """Bygger ett datetime (med konstgjort datum) från valfri tolkbar tid."""
-    hm = _hm_from_any(time_val)
-    if hm is None:
-        return None
-    h, m = hm
-    fake_date = "2000-01-02" if h < 12 else "2000-01-01"
-    return datetime.strptime(f"{fake_date} {h:02d}:{m:02d}", "%Y-%m-%d %H:%M")
-
-def round_down_15(dt):
-    """Rundar ned till närmaste 15-minutersintervall."""
-    return dt.replace(minute=(dt.minute // 15) * 15, second=0, microsecond=0)
-
-def round_up_15(dt):
-    """Rundar upp till närmaste 15-minutersintervall."""
-    if dt.minute % 15 != 0 or dt.second > 0 or dt.microsecond > 0:
-        dt = dt + timedelta(minutes=15 - (dt.minute % 15), seconds=-dt.second, microseconds=-dt.microsecond)
-    return dt.replace(second=0, microsecond=0)
-
-def interval_to_sortkey(interval):
-    """Konverterar 'HH:MM' till datetime (med konstgjort datum) för sortering/jämförelse."""
-    try:
-        t = pd.to_datetime(str(interval), format="%H:%M", errors="coerce")
-        if pd.isna(t):
-            return None
-        h, m = int(t.hour), int(t.minute)
-        fake_date = "2000-01-02" if h < 12 else "2000-01-01"
-        return datetime.strptime(f"{fake_date} {h:02d}:{m:02d}", "%Y-%m-%d %H:%M")
-    except Exception:
-        return None
-
-def detect_column(df, candidates):
-    """Hittar första kolumn vars namn (case-insensitivt) matchar en av kandidaterna."""
-    lowmap = {str(c).strip().lower(): c for c in df.columns}
-    for k in candidates:
-        if k in lowmap:
-            return lowmap[k]
-    return None
-
-def count_nights(df):
-    """
-    Räknar antal unika fältnätter i en fil.
-    - Använder DATE/Datum och TIME/Tid (tider < 12 → räknas till föregående natt).
-    - Om datum saknas returneras None.
-    """
-    date_col = detect_column(df, ["date", "datum"])
-    if not date_col:
-        return None
-    time_col = detect_column(df, ["time", "tid"])
-
-    dates = pd.to_datetime(df[date_col], errors="coerce")
-    if time_col:
-        hm = df[time_col].apply(_hm_from_any)
-        hours = hm.apply(lambda x: x[0] if isinstance(x, tuple) else None)
-        shift = hours.apply(lambda h: (h is not None) and (h < 12))
-        night_key = (dates.dt.normalize() - pd.to_timedelta(shift.fillna(False).astype(int), unit="D")).dt.date
-    else:
-        night_key = dates.dt.normalize().dt.date
-
-    nights = pd.Series(night_key).dropna().nunique()
-    return int(nights) if nights else None
 
 # ================== GUI: samlingspanel för input, utdata, tider och färger ==================
 def _validate_hex(s):
@@ -851,88 +622,10 @@ print(f"Klar! Sparad fil (ART): {out_path_art}")
 open_file(out_path_nvi)
 open_file(out_path_art)
 
-# ================== STEG 2: (valfritt) Skapa diagram – global Y-skala ==================
-def _hm_from_any_for_plot(val):
-    """Alias för tidsparsing i plottlogik (samma funktion som _hm_from_any)."""
-    return _hm_from_any(val)
-
-def _compute_file_ymax(input_file, custom_time_range):
-    """Beräknar max staplad topp (per 15-min slot) för en fil – används för global Y-skala."""
-    try:
-        df = read_input_table(input_file)
-        df["species_type_list"] = df["MANUAL ID"].map(extract_species_and_type)
-
-        def time_to_interval(val):
-            hm = _hm_from_any_for_plot(val)
-            if hm is None:
-                return ""
-            h, m = hm
-            minutes = int((m // 15) * 15)
-            return f"{h:02d}:{minutes:02d}"
-        df["interval"] = df["TIME"].map(time_to_interval)
-
-        df_long = df.explode("species_type_list")
-        df_long = df_long[df_long["species_type_list"].notna()]
-        if df_long.empty:
-            return 0
-        df_long[["species", "obs_type"]] = pd.DataFrame(df_long["species_type_list"].tolist(), index=df_long.index)
-        df_long = df_long[df_long["species"].astype(str).str.strip().str.lower() != "noise"]
-        df_long = df_long[df_long["species"].astype(str).str.strip() != ""]
-
-        if custom_time_range:
-            min_dt = str_to_dt(custom_time_range[0] + ":00")
-            max_dt = str_to_dt(custom_time_range[1] + ":00")
-            if min_dt is None or max_dt is None:
-                return 0
-            min_dt = round_down_15(min_dt)
-            max_dt = round_up_15(max_dt)
-        else:
-            dt_series = df["TIME"].apply(str_to_dt).dropna()
-            if len(dt_series) == 0:
-                ints = [s for s in df["interval"].astype(str).tolist() if s and s.lower() != "nan"]
-                dt_from_int = [interval_to_sortkey(s) for s in ints]
-                dt_from_int = [d for d in dt_from_int if d is not None]
-                if not dt_from_int:
-                    return 0
-                min_dt = round_down_15(min(dt_from_int))
-                max_dt = round_up_15(max(dt_from_int))
-            else:
-                min_dt = round_down_15(min(dt_series))
-                max_dt = round_up_15(max(dt_series))
-
-        all_intervals = []
-        t = min_dt
-        while t <= max_dt:
-            all_intervals.append(t.strftime("%H:%M"))
-            t += timedelta(minutes=15)
-        all_intervals = list(dict.fromkeys(all_intervals))
-
-        agg = df_long.groupby(["interval", "species", "obs_type"]).size().reset_index(name="antal")
-        agg["interval"] = pd.Categorical(agg["interval"], categories=all_intervals, ordered=True)
-        type_order = ["Socialt", "Födosökande", "Förbiflygande"]
-
-        y_max_file = 0
-        for sp in df_long["species"].unique():
-            plot_data = (
-                agg[agg["species"] == sp]
-                .pivot(index="interval", columns="obs_type", values="antal")
-                .fillna(0)
-                .reindex(all_intervals, fill_value=0)
-                .reindex(columns=type_order, fill_value=0)
-            )
-            if not plot_data.empty:
-                y_max_file = max(y_max_file, int(plot_data.sum(axis=1).max()))
-        return y_max_file
-    except Exception:
-        return 0
-
-def generate_bat_diagrams(input_files_list, diagrams_root, custom_time_range):
+def generate_bat_diagrams(input_files_list, diagrams_root, custom_time_range, custom_colors=None):
     """Genererar linje- och stapeldiagram för varje fil – alla med gemensam global Y-skala."""
-    # Globalt Y-tak baserat på alla valda filer
-    global_y_max = 0
-    for p in input_files_list:
-        global_y_max = max(global_y_max, _compute_file_ymax(p, custom_time_range))
-    y_lim_global = max(1, math.ceil(global_y_max * 1.05))
+    class_cfg = resolve_dataset_class_config(input_files_list, custom_colors=custom_colors)
+    y_lim_global = compute_global_ymax_across_files(input_files_list, custom_time_range, code_map=class_cfg["code_map"])
     print(f"Global gemensam Y-max (linje + stapel) för alla filer: {y_lim_global}")
 
     for input_file in input_files_list:
@@ -943,39 +636,46 @@ def generate_bat_diagrams(input_files_list, diagrams_root, custom_time_range):
         output_dir_stacks = os.path.join(diagrams_root, f"{stem}_stapeldiagram")
         os.makedirs(output_dir_lines, exist_ok=True)
 
-        # Läs och förbered
         df = read_input_table(input_file)
+        time_col = detect_column(df, ["time", "tid"])
+        if time_col is None:
+            continue
+
         df["species_type_list"] = df["MANUAL ID"].map(extract_species_and_type)
 
         def time_to_interval(val):
-            hm = _hm_from_any_for_plot(val)
+            hm = _hm_from_any(val)
             if hm is None:
                 return ""
             h, m = hm
             minutes = int((m // 15) * 15)
             return f"{h:02d}:{minutes:02d}"
-        df["interval"] = df["TIME"].map(time_to_interval)
+        df["interval"] = df[time_col].map(time_to_interval)
 
         df_long = df.explode("species_type_list")
         df_long = df_long[df_long["species_type_list"].notna()]
         if df_long.empty:
             print("Inga data efter tolkning. Hoppar över.")
             continue
-        df_long[["species", "obs_type"]] = pd.DataFrame(df_long["species_type_list"].tolist(), index=df_long.index)
+        df_long[["species", "obs_code"]] = pd.DataFrame(df_long["species_type_list"].tolist(), index=df_long.index)
+
+        code_map = class_cfg["code_map"]
+        type_order = class_cfg["type_order"]
+        colors_art = class_cfg["colors_art"]
+        colors_nvi = class_cfg["colors_nvi"]
+        art_color_dict = class_cfg["art_color_dict"]
+        nvi_color_dict = class_cfg["nvi_color_dict"]
+
+        df_long["obs_type"] = df_long["obs_code"].map(code_map)
         df_long = df_long[df_long["species"].astype(str).str.strip().str.lower() != "noise"]
         df_long = df_long[df_long["species"].astype(str).str.strip() != ""]
+        if df_long.empty:
+            continue
 
-        # Tidsspann (auto eller manuellt)
         if custom_time_range:
-            min_dt = str_to_dt(custom_time_range[0] + ":00")
-            max_dt = str_to_dt(custom_time_range[1] + ":00")
-            if min_dt is None or max_dt is None:
-                print("Fel i manuellt intervall. Hoppar över filen.")
-                continue
-            min_dt = round_down_15(min_dt)
-            max_dt = round_up_15(max_dt)
+            all_intervals = build_manual_interval_sequence(custom_time_range)
         else:
-            dt_series = df["TIME"].apply(str_to_dt).dropna()
+            dt_series = df[time_col].apply(str_to_dt).dropna()
             if len(dt_series) == 0:
                 ints = [s for s in df["interval"].astype(str).tolist() if s and s.lower() != "nan"]
                 dt_from_int = [interval_to_sortkey(s) for s in ints]
@@ -985,28 +685,20 @@ def generate_bat_diagrams(input_files_list, diagrams_root, custom_time_range):
                     continue
                 min_dt = round_down_15(min(dt_from_int))
                 max_dt = round_up_15(max(dt_from_int))
-
             else:
                 min_dt = round_down_15(min(dt_series))
                 max_dt = round_up_15(max(dt_series))
 
-        # Lista alla 15-minutersintervall
-        all_intervals = []
-        t = min_dt
-        while t <= max_dt:
-            all_intervals.append(t.strftime("%H:%M"))
-            t += timedelta(minutes=15)
-        all_intervals = list(dict.fromkeys(all_intervals))
+            all_intervals = []
+            t = min_dt
+            while t <= max_dt:
+                all_intervals.append(t.strftime("%H:%M"))
+                t += timedelta(minutes=15)
+            all_intervals = list(dict.fromkeys(all_intervals))
 
-        # Aggregera data för diagram
         agg = df_long.groupby(["interval", "species", "obs_type"]).size().reset_index(name="antal")
         agg["interval"] = pd.Categorical(agg["interval"], categories=all_intervals, ordered=True)
-        species_list = sorted(df_long["species"].unique())
-        type_order = ["Socialt", "Födosökande", "Förbiflygande"]
-
-        # Färglistor (HEX) för stapeldiagram
-        colors_art = [HEX_ART_SOC, HEX_ART_FODO, HEX_ART_FORBI]
-        colors_nvi = [HEX_NVI_SOC, HEX_NVI_FODO, HEX_NVI_FORBI]
+        species_list = sorted(df_long["species"].unique(), key=species_sort_key)
 
         # LINJEDIAGRAM – samlingsdiagram
         agg_line = df_long.groupby(["interval", "species"]).size().reset_index(name="antal")
@@ -1072,6 +764,18 @@ def generate_bat_diagrams(input_files_list, diagrams_root, custom_time_range):
             plt.grid(True, axis='y')
             plt.savefig(os.path.join(output_dir_stacks_art, f"{safe_filename(species)}.png"))
             plt.close()
+
+        _plot_all_species_grouped_stacked(
+            df_long=df_long,
+            all_intervals=all_intervals,
+            species_list=species_list,
+            type_order=type_order,
+            color_dict=art_color_dict,
+            out_path=os.path.join(output_dir_stacks_art, "alla_arter.png"),
+            title_text=f"Fladdermusobservationer – alla arter, antal observerade beteenden: {total_obs}",
+            ymax_mode="fixed",
+            y_lim_global=y_lim_global,
+        )
         print(f"Stapeldiagram ART sparade i mappen: {output_dir_stacks_art}")
 
         # STAPELDIAGRAM – NVI
@@ -1097,6 +801,18 @@ def generate_bat_diagrams(input_files_list, diagrams_root, custom_time_range):
             plt.grid(True, axis='y')
             plt.savefig(os.path.join(output_dir_stacks_nvi, f"{safe_filename(species)}.png"))
             plt.close()
+
+        _plot_all_species_grouped_stacked(
+            df_long=df_long,
+            all_intervals=all_intervals,
+            species_list=species_list,
+            type_order=type_order,
+            color_dict=nvi_color_dict,
+            out_path=os.path.join(output_dir_stacks_nvi, "alla_arter.png"),
+            title_text=f"Fladdermusobservationer – alla arter, antal observerade beteenden: {total_obs}",
+            ymax_mode="fixed",
+            y_lim_global=y_lim_global,
+        )
         print(f"Stapeldiagram NVI sparade i mappen: {output_dir_stacks_nvi}")
         print(f"Linjediagram sparade i mappen: {output_dir_lines}")
         print(f"Tidsintervall: {all_intervals[0]} – {all_intervals[-1]}")

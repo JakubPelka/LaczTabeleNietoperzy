@@ -27,399 +27,91 @@ try:
 except ModuleNotFoundError:  # Direct execution from the algorithms directory.
     from input_reader import read_input_table
 
-# ================== Grundinställningar / etiketter ==================
-DEFAULT_OUT_BASENAME = "sammanstallning_fladdermus"
+try:
+    from algorithms.core import (
+        BORDER_MEDIUM,
+        DEFAULT_OUT_BASENAME,
+        FILL_HDR,
+        HEX_HEADER_FG,
+        HEX_NVI_FODO,
+        HEX_ART_FODO,
+        HEX_TABLE_FORBI,
+        LATIN_TO_SV,
+        _compute_ymax_for_subset,
+        _hm_from_any,
+        _plot_all_species_grouped_stacked,
+        _validate_hex,
+        build_all_species_grouped_data,
+        build_manual_interval_sequence,
+        compute_global_ymax_across_files,
+        compute_global_ymax_across_files_and_nights,
+        compute_ymax_with_headroom,
+        count_nights,
+        detect_column,
+        display_label_multiline,
+        extract_species_and_type,
+        fill_from_hex,
+        format_title,
+        get_unique_input_stems,
+        hex_to_argb,
+        is_time_in_range,
+        interval_to_sortkey,
+        night_label_str,
+        open_file,
+        report_progress,
+        resolve_dataset_class_config,
+        round_down_15,
+        round_up_15,
+        row_night_key,
+        safe_filename,
+        safe_sheet_name,
+        species_sort_key,
+        str_to_dt,
+        validate_hhmm,
+    )
+except ModuleNotFoundError:
+    from core import (
+        BORDER_MEDIUM,
+        DEFAULT_OUT_BASENAME,
+        FILL_HDR,
+        HEX_HEADER_FG,
+        HEX_NVI_FODO,
+        HEX_ART_FODO,
+        HEX_TABLE_FORBI,
+        LATIN_TO_SV,
+        _compute_ymax_for_subset,
+        _hm_from_any,
+        _plot_all_species_grouped_stacked,
+        _validate_hex,
+        build_all_species_grouped_data,
+        build_manual_interval_sequence,
+        compute_global_ymax_across_files,
+        compute_global_ymax_across_files_and_nights,
+        compute_ymax_with_headroom,
+        count_nights,
+        detect_column,
+        display_label_multiline,
+        extract_species_and_type,
+        fill_from_hex,
+        format_title,
+        get_unique_input_stems,
+        hex_to_argb,
+        is_time_in_range,
+        interval_to_sortkey,
+        night_label_str,
+        open_file,
+        report_progress,
+        resolve_dataset_class_config,
+        round_down_15,
+        round_up_15,
+        row_night_key,
+        safe_filename,
+        safe_sheet_name,
+        species_sort_key,
+        str_to_dt,
+        validate_hhmm,
+    )
 
-# ================== Färger – enhetligt HEX-format ==================
-HEX_HEADER_BG = "#595959"
-HEX_HEADER_FG = "#FFFFFF"
-HEX_TABLE_FORBI = "#E7E6E6"   # samma i NVI/ART tabellerna
-
-# Stapeldiagram-paletter (standard om ingen SOF i datasetet)
-HEX_NVI_SOC_DEFAULT_NO_SOF = "#FF0000"  # Socialt
-HEX_ART_SOC_DEFAULT_NO_SOF = "#EB09D8"  # Socialt
-
-# Standardfärger när SOF finns i datasetet (#8)
-HEX_NVI_SOC_DEFAULT_WITH_SOF = "#9A0B08"  # Socialt - läte
-HEX_NVI_SOF_DEFAULT          = "#FF0000"  # Socialt - flyg (tar ursprungliga SOC-färgen)
-
-HEX_ART_SOC_DEFAULT_WITH_SOF = "#8D0B82"  # Socialt - läte
-HEX_ART_SOF_DEFAULT          = "#EB09D8"  # Socialt - flyg (tar ursprungliga SOC-färgen)
-
-HEX_NVI_FODO  = "#FFC000"  # Födosökande
-HEX_NVI_FORBI = "#A9A9A9"  # Förbiflygande
-
-HEX_ART_FODO  = "#D98FD3"  # Födosökande
-HEX_ART_FORBI = "#ABAAA9"  # Förbiflygande
-
-HEX_NVI_SOC   = HEX_NVI_SOC_DEFAULT_NO_SOF
-HEX_ART_SOC   = HEX_ART_SOC_DEFAULT_NO_SOF
-
-BORDER_MEDIUM = Side(style="medium", color="FF000000")
-
-def hex_to_argb(hex_rgb: str) -> str:
-    h = hex_rgb.strip().lstrip("#")
-    if len(h) != 6:
-        raise ValueError(f"Ogiltig HEX: {hex_rgb}")
-    return "FF" + h.upper()
-
-def fill_from_hex(hex_rgb: str) -> PatternFill:
-    return PatternFill("solid", fgColor=hex_to_argb(hex_rgb))
-
-FILL_HDR = fill_from_hex(HEX_HEADER_BG)
-
-
-def report_progress(pct: int, msg: str) -> None:
-    progress_path_str = os.environ.get("PROGRESS_PATH")
-    if progress_path_str:
-        try:
-            import json
-
-            p = os.path.abspath(progress_path_str)
-            os.makedirs(os.path.dirname(p), exist_ok=True)
-            tmp_p = f"{p}.tmp"
-            with open(tmp_p, "w", encoding="utf-8") as f:
-                json.dump({"progress": pct, "progress_message": msg}, f)
-            os.replace(tmp_p, p)
-        except Exception:
-            pass
-
-
-# =============== Ordbok Latin → Svenska ===============
-LATIN_TO_SV = {
-    "Barbastella barbastellus": "Barbastell",
-    "Eptesicus nilssonii": "Nordfladdermus",
-    "Eptesicus serotinus": "Sydfladdermus",
-    "Cnephaeus nilssonii": "Nordfladdermus",
-    "Cnephaeus serotinus": "Sydfladdermus",
-    "Myotis alcathoe": "Nymffladdermus",
-    "Myotis bechsteinii": "Bechsteins fladdermus",
-    "Myotis brandtii": "Tajgafladdermus",
-    "Myotis dasycneme": "Dammfladdermus",
-    "Myotis daubentonii": "Vattenfladdermus",
-    "Myotis myotis": "Större musöra",
-    "Myotis mystacinus": "Mustaschfladdermus",
-    "Myotis nattereri": "Fransfladdermus",
-    "Myotis mystacinus/brandtii": "Mustasch/Tajgafladdermus",
-    "Nyctalus leisleri": "Mindre brunfladdermus",
-    "Nyctalus noctula": "Större brunfladdermus",
-    "Pipistrellus kuhlii": "Parkpipistrell",
-    "Pipistrellus nathusii": "Trollpipistrell",
-    "Pipistrellus pipistrellus": "Sydpipistrell",
-    "Pipistrellus pygmaeus": "Dvärgpipistrell",
-    "Plecotus auritus": "Brunlångöra",
-    "Plecotus austriacus": "Grålångöra",
-    "Vespertilio murinus": "Gråskimlig fladdermus",
-    "Nyctaloid": None,
-    "Chiroptera": None,
-}
-SPECIAL_TAIL = {"nyctaloid", "chiroptera"}  # sorteras sist i artlistor
-
-# ================== Hjälpfunktioner (gemensamma) ==================
-def safe_sheet_name(path: str, used: set) -> str:
-    base = os.path.splitext(os.path.basename(path))[0]
-    base = re.sub(r'[:\\\/\?\*\[\]]', '_', base).strip()[:31] or "Ark"
-    cand = base; i = 2
-    while cand in used or not cand:
-        suf = f"_{i}"
-        cand = (base[: (31 - len(suf))] + suf) if len(base) + len(suf) > 31 else (base + suf)
-        i += 1
-    used.add(cand); return cand
-
-def display_label_multiline(latin: str) -> str:
-    latin = str(latin).strip()
-    sv = LATIN_TO_SV.get(latin, None)
-    if sv:
-        return f"{sv.capitalize()},\n{latin}"
-    return latin
-
-def format_title(species_latin: str, total_count: int, night_label: str | None = None) -> str:
-    sv = LATIN_TO_SV.get(species_latin)
-    display_latin = species_latin
-    if species_latin == "Eptesicus nilssonii":
-        display_latin = "Cnephaeus nilssonii"
-    elif species_latin == "Eptesicus serotinus":
-        display_latin = "Cnephaeus serotinus"
-
-    base = f"{sv} ({display_latin})" if sv else display_latin
-    if night_label:
-        return f"{base} – natt {night_label}, antal observerade beteenden: {int(total_count)}"
-    return f"{base}, antal observerade beteenden: {int(total_count)}"
-
-def extract_species_and_type(manual_id_value):
-    if pd.isna(manual_id_value): return []
-    out = []
-    for raw in str(manual_id_value).split(","):
-        entry = raw.strip()
-        if not entry: continue
-        upper = entry.upper()
-        if "SOF" in upper or "SOCIALT - FLYG" in upper:
-            typ = "SOF"
-        elif "SOC" in upper or "SOCIALT" in upper:
-            typ = "SOC"
-        elif "FOD" in upper or "FÖDOSÖKANDE" in upper or "FODOSOKANDE" in upper:
-            typ = "FOD"
-        else:
-            typ = "FORBI"
-
-        species = re.sub(r'\b(FOD|SOC|SOF|FORBI)\b', "", entry, flags=re.IGNORECASE)
-        species = re.sub(r'(?i)socialt\s*-\s*flyg|socialt\s*-\s*läte|socialt|födosökande|fodosokande|förbiflygande', "", species).strip(" ,;")
-        if species == "Eptesicus nilssonii":
-            species = "Cnephaeus nilssonii"
-        elif species == "Eptesicus serotinus":
-            species = "Cnephaeus serotinus"
-        out.append((species, typ))
-    return out
-
-def resolve_dataset_class_config(input_files_or_dfs, custom_colors=None):
-    """Determine if dataset has SOF and build class names, type order, and color palettes."""
-    has_sof = False
-    for item in input_files_or_dfs:
-        if isinstance(item, (str, os.PathLike)):
-            try:
-                df = read_input_table(item)
-            except Exception:
-                continue
-        else:
-            df = item
-
-        if "MANUAL ID" in df.columns:
-            for val in df["MANUAL ID"].dropna():
-                for _, typ in extract_species_and_type(val):
-                    if typ == "SOF":
-                        has_sof = True
-                        break
-                if has_sof:
-                    break
-        if has_sof:
-            break
-
-    custom_colors = custom_colors or {}
-    nvi_custom = custom_colors.get("NVI") or {}
-    art_custom = custom_colors.get("ART") or {}
-
-    if has_sof:
-        type_order = ["Socialt - läte", "Socialt - flyg", "Födosökande", "Förbiflygande"]
-        code_map = {
-            "SOC": "Socialt - läte",
-            "SOF": "Socialt - flyg",
-            "FOD": "Födosökande",
-            "FORBI": "Förbiflygande"
-        }
-        nvi_soc_color = nvi_custom.get("Socialt - läte") or nvi_custom.get("SOC") or nvi_custom.get("Socialt") or HEX_NVI_SOC_DEFAULT_WITH_SOF
-        nvi_sof_color = nvi_custom.get("Socialt - flyg") or nvi_custom.get("SOF") or HEX_NVI_SOF_DEFAULT
-        nvi_fodo_color = nvi_custom.get("Födosökande") or nvi_custom.get("FOD") or HEX_NVI_FODO
-        nvi_forbi_color = nvi_custom.get("Förbiflygande") or nvi_custom.get("FORBI") or HEX_NVI_FORBI
-
-        art_soc_color = art_custom.get("Socialt - läte") or art_custom.get("SOC") or art_custom.get("Socialt") or HEX_ART_SOC_DEFAULT_WITH_SOF
-        art_sof_color = art_custom.get("Socialt - flyg") or art_custom.get("SOF") or HEX_ART_SOF_DEFAULT
-        art_fodo_color = art_custom.get("Födosökande") or art_custom.get("FOD") or HEX_ART_FODO
-        art_forbi_color = art_custom.get("Förbiflygande") or art_custom.get("FORBI") or HEX_ART_FORBI
-
-        nvi_colors = [nvi_soc_color, nvi_sof_color, nvi_fodo_color, nvi_forbi_color]
-        art_colors = [art_soc_color, art_sof_color, art_fodo_color, art_forbi_color]
-    else:
-        type_order = ["Socialt", "Födosökande", "Förbiflygande"]
-        code_map = {
-            "SOC": "Socialt",
-            "SOF": "Socialt - flyg",
-            "FOD": "Födosökande",
-            "FORBI": "Förbiflygande"
-        }
-        nvi_soc_color = nvi_custom.get("Socialt") or nvi_custom.get("Socialt - läte") or nvi_custom.get("SOC") or HEX_NVI_SOC_DEFAULT_NO_SOF
-        nvi_fodo_color = nvi_custom.get("Födosökande") or nvi_custom.get("FOD") or HEX_NVI_FODO
-        nvi_forbi_color = nvi_custom.get("Förbiflygande") or nvi_custom.get("FORBI") or HEX_NVI_FORBI
-
-        art_soc_color = art_custom.get("Socialt") or art_custom.get("Socialt - läte") or art_custom.get("SOC") or HEX_ART_SOC_DEFAULT_NO_SOF
-        art_fodo_color = art_custom.get("Födosökande") or art_custom.get("FOD") or HEX_ART_FODO
-        art_forbi_color = art_custom.get("Förbiflygande") or art_custom.get("FORBI") or HEX_ART_FORBI
-
-        nvi_colors = [nvi_soc_color, nvi_fodo_color, nvi_forbi_color]
-        art_colors = [art_soc_color, art_fodo_color, art_forbi_color]
-
-    nvi_color_dict = dict(zip(type_order, nvi_colors))
-    art_color_dict = dict(zip(type_order, art_colors))
-
-    return {
-        "has_sof": has_sof,
-        "type_order": type_order,
-        "code_map": code_map,
-        "colors_art": art_colors,
-        "colors_nvi": nvi_colors,
-        "art_color_dict": art_color_dict,
-        "nvi_color_dict": nvi_color_dict,
-    }
-
-def compute_ymax_with_headroom(max_val: float | int) -> int:
-    """Derive Y max from actual plotted data + 10% headroom, with deterministic min of 1."""
-    if max_val <= 0:
-        return 1
-    return max(1, math.ceil(max_val * 1.10))
-
-def open_file(path):
-    try:
-        if sys.platform.startswith("win"): os.startfile(path)
-        elif sys.platform == "darwin": subprocess.run(["open", path])
-        else: subprocess.run(["xdg-open", path])
-    except Exception as e:
-        print(f"Kan inte öppna filen automatiskt: {e}")
-
-def species_sort_key(latin: str):
-    return (str(latin).strip().lower() in SPECIAL_TAIL, str(latin).casefold())
-
-def safe_filename(s):
-    return re.sub(r'[\\/:\*\?"<>\|]', '_', str(s))
-
-# --- Tidshjälp ---
-def validate_hhmm(val: str | None) -> tuple[int, int] | None:
-    if val is None or not str(val).strip():
-        return None
-    s = str(val).strip()
-    match = re.fullmatch(r"([0-1][0-9]|2[0-3]):([0-5][0-9])", s)
-    if not match:
-        raise ValueError(f"Invalid time format '{val}'. Expected HH:MM in 24-hour format.")
-    return int(match.group(1)), int(match.group(2))
-
-def is_time_in_range(time_val, start_str: str, stop_str: str) -> bool:
-    hm = _hm_from_any(time_val)
-    if hm is None:
-        return False
-    sh_sm = validate_hhmm(start_str)
-    eh_em = validate_hhmm(stop_str)
-    if not sh_sm or not eh_em:
-        return True
-    t_min = time(sh_sm[0], sh_sm[1])
-    t_max = time(eh_em[0], eh_em[1])
-    t_reg = time(hm[0], hm[1])
-    if sh_sm <= eh_em:
-        return t_min <= t_reg <= t_max
-    else:
-        return t_reg >= t_min or t_reg <= t_max
-
-def build_manual_interval_sequence(custom_time_range: tuple[str, str]) -> list[str]:
-    start_str, stop_str = custom_time_range
-    sh_sm = validate_hhmm(start_str)
-    eh_em = validate_hhmm(stop_str)
-    if not sh_sm or not eh_em:
-        return []
-    start_dt = datetime(2000, 1, 1, sh_sm[0], sh_sm[1])
-    if eh_em < sh_sm:
-        stop_dt = datetime(2000, 1, 2, eh_em[0], eh_em[1])
-    else:
-        stop_dt = datetime(2000, 1, 1, eh_em[0], eh_em[1])
-    min_dt = round_down_15(start_dt)
-    max_dt = round_up_15(stop_dt)
-
-    intervals = []
-    t = min_dt
-    while t <= max_dt:
-        intervals.append(t.strftime("%H:%M"))
-        t += timedelta(minutes=15)
-    return list(dict.fromkeys(intervals))
-
-def get_unique_input_stems(input_files: list[str]) -> dict[str, str]:
-    used_stems = set()
-    result = {}
-    for path in input_files:
-        base_stem = safe_filename(os.path.splitext(os.path.basename(path))[0])
-        cand = base_stem
-        counter = 2
-        while cand in used_stems:
-            cand = f"{base_stem}_{counter}"
-            counter += 1
-        used_stems.add(cand)
-        result[path] = cand
-    return result
-
-def _hm_from_any(val):
-    try:
-        if val is None or (isinstance(val, float) and pd.isna(val)) or (isinstance(val, str) and val.strip() == ""):
-            return None
-        if hasattr(val, "hour") and hasattr(val, "minute"):
-            return int(val.hour), int(val.minute)
-        if isinstance(val, (int, float)) and not pd.isna(val):
-            frac = float(val) % 1.0
-            secs = int(round(frac * 24 * 60 * 60))
-            h = (secs // 3600) % 24
-            m = (secs % 3600) // 60
-            return int(h), int(m)
-        s = str(val).strip()
-        t = pd.to_datetime(s, format="%H:%M:%S", errors="coerce")
-        if pd.isna(t):
-            t = pd.to_datetime(s, format="%H:%M", errors="coerce")
-        if pd.isna(t):
-            return None
-        return int(t.hour), int(t.minute)
-    except Exception:
-        return None
-
-def str_to_dt(time_val):
-    hm = _hm_from_any(time_val)
-    if hm is None:
-        return None
-    h, m = hm
-    fake_date = "2000-01-02" if h < 12 else "2000-01-01"
-    return datetime.strptime(f"{fake_date} {h:02d}:{m:02d}", "%Y-%m-%d %H:%M")
-
-def round_down_15(dt):
-    return dt.replace(minute=(dt.minute // 15) * 15, second=0, microsecond=0)
-
-def round_up_15(dt):
-    if dt.minute % 15 != 0 or dt.second > 0 or dt.microsecond > 0:
-        dt = dt + timedelta(minutes=15 - (dt.minute % 15), seconds=-dt.second, microseconds=-dt.microsecond)
-    return dt.replace(second=0, microsecond=0)
-
-def interval_to_sortkey(interval):
-    try:
-        t = pd.to_datetime(str(interval), format="%H:%M", errors="coerce")
-        if pd.isna(t): return None
-        h, m = int(t.hour), int(t.minute)
-        fake_date = "2000-01-02" if h < 12 else "2000-01-01"
-        return datetime.strptime(f"{fake_date} {h:02d}:{m:02d}", "%Y-%m-%d %H:%M")
-    except Exception:
-        return None
-
-def detect_column(df, candidates):
-    lowmap = {str(c).strip().lower(): c for c in df.columns}
-    for k in candidates:
-        if k in lowmap:
-            return lowmap[k]
-    return None
-
-def count_nights(df):
-    date_col = detect_column(df, ["date", "datum"])
-    if not date_col: return None
-    time_col = detect_column(df, ["time", "tid"])
-
-    dates = pd.to_datetime(df[date_col], errors="coerce")
-    if time_col:
-        hm = df[time_col].apply(_hm_from_any)
-        hours = hm.apply(lambda x: x[0] if isinstance(x, tuple) else None)
-        shift = hours.apply(lambda h: (h is not None) and (h < 12))
-        night_key = (dates.dt.normalize() - pd.to_timedelta(shift.fillna(False).astype(int), unit="D")).dt.date
-    else:
-        night_key = dates.dt.normalize().dt.date
-
-    nights = pd.Series(night_key).dropna().nunique()
-    return int(nights) if nights else None
-
-def row_night_key(d_val, t_val):
-    d = pd.to_datetime(d_val, errors="coerce")
-    if pd.isna(d): return None
-    hm = _hm_from_any(t_val)
-    if hm is None:
-        return d.date()
-    h, _ = hm
-    return (d - pd.Timedelta(days=1)).date() if h < 12 else d.date()
-
-# ================== GUI ==================
-def _validate_hex(s):
-    s = (s or "").strip()
-    if not s: return None
-    if s.startswith("#"): s = s[1:]
-    if len(s) != 6 or any(c not in "0123456789abcdefABCDEF" for c in s):
-        return None
-    return "#" + s.upper()
 
 def gui_collect_settings(default_basename=DEFAULT_OUT_BASENAME):
     root = tk.Tk()
@@ -982,7 +674,7 @@ def _plot_all_species_grouped_stacked(
             max_bar_h = bar_h
 
     if ymax_mode == "zoomed":
-        chart_ymax = compute_ymax_with_headroom(max_bar_h)
+        chart_ymax = compute_ymax_with_headroom(max_bar_h, headroom_factor=1.10)
     else:
         chart_ymax = y_lim_global
 
@@ -1073,13 +765,6 @@ def _plot_for_subset(df_subset, custom_time_range, y_lim_global,
         df = df[df[time_col].apply(lambda t: is_time_in_range(t, start_str, stop_str))]
         if df.empty: return
 
-    type_order = class_cfg["type_order"]
-    code_map = class_cfg["code_map"]
-    colors_art = class_cfg["colors_art"]
-    colors_nvi = class_cfg["colors_nvi"]
-    art_color_dict = class_cfg["art_color_dict"]
-    nvi_color_dict = class_cfg["nvi_color_dict"]
-
     df["species_type_list"] = df["MANUAL ID"].map(extract_species_and_type)
 
     def time_to_interval(val):
@@ -1093,6 +778,14 @@ def _plot_for_subset(df_subset, custom_time_range, y_lim_global,
     df_long = df_long[df_long["species_type_list"].notna()]
     if df_long.empty: return
     df_long[["species", "obs_code"]] = pd.DataFrame(df_long["species_type_list"].tolist(), index=df_long.index)
+
+    code_map = class_cfg["code_map"]
+    type_order = class_cfg["type_order"]
+    colors_art = class_cfg["colors_art"]
+    colors_nvi = class_cfg["colors_nvi"]
+    art_color_dict = class_cfg["art_color_dict"]
+    nvi_color_dict = class_cfg["nvi_color_dict"]
+
     df_long["obs_type"] = df_long["obs_code"].map(code_map)
     df_long = df_long[df_long["species"].astype(str).str.strip().str.lower() != "noise"]
     df_long = df_long[df_long["species"].astype(str).str.strip() != ""]
@@ -1121,7 +814,11 @@ def _plot_for_subset(df_subset, custom_time_range, y_lim_global,
     # Agg
     agg = df_long.groupby(["interval", "species", "obs_type"]).size().reset_index(name="antal")
     agg["interval"] = pd.Categorical(agg["interval"], categories=all_intervals, ordered=True)
-    species_list = sorted(df_long["species"].unique())
+    species_list = sorted(df_long["species"].unique(), key=species_sort_key)
+
+    os.makedirs(out_lines, exist_ok=True)
+    os.makedirs(out_stacks_art, exist_ok=True)
+    os.makedirs(out_stacks_nvi, exist_ok=True)
 
     # LINJE – samlingsdiagram
     agg_line = df_long.groupby(["interval", "species"]).size().reset_index(name="antal")
@@ -1130,7 +827,7 @@ def _plot_for_subset(df_subset, custom_time_range, y_lim_global,
     pivot_line = pivot_line.reindex(all_intervals, fill_value=0)
     total_obs = df_long.shape[0]
 
-    ymax_line_all = compute_ymax_with_headroom(pivot_line.max().max()) if ymax_mode == "zoomed" else y_lim_global
+    ymax_line_all = compute_ymax_with_headroom(pivot_line.max().max(), headroom_factor=1.10) if ymax_mode == "zoomed" else y_lim_global
 
     plt.figure(figsize=(12, 6))
     ax_all = plt.gca()
@@ -1150,7 +847,7 @@ def _plot_for_subset(df_subset, custom_time_range, y_lim_global,
     # LINJE – per art
     for species in species_list:
         total_sp = int(pivot_line[species].sum())
-        ymax_line_sp = compute_ymax_with_headroom(pivot_line[species].max()) if ymax_mode == "zoomed" else y_lim_global
+        ymax_line_sp = compute_ymax_with_headroom(pivot_line[species].max(), headroom_factor=1.10) if ymax_mode == "zoomed" else y_lim_global
         plt.figure(figsize=(10, 4)); ax = plt.gca()
         ax.plot(pivot_line.index, pivot_line[species], marker='o')
         ax.set_xlabel("Tid (15-minutersintervall)"); ax.set_ylabel("Antal ljudfiler")
@@ -1170,7 +867,7 @@ def _plot_for_subset(df_subset, custom_time_range, y_lim_global,
             .reindex(all_intervals, fill_value=0)
             .reindex(columns=type_order, fill_value=0)
         )
-        ymax_bar_sp = compute_ymax_with_headroom(plot_data.sum(axis=1).max()) if ymax_mode == "zoomed" else y_lim_global
+        ymax_bar_sp = compute_ymax_with_headroom(plot_data.sum(axis=1).max(), headroom_factor=1.10) if ymax_mode == "zoomed" else y_lim_global
         ax = plot_data.plot(kind="bar", stacked=True, color=colors_art, figsize=(14, 6))
         plt.xlabel("Tid (15-minutersintervall)"); plt.ylabel("Antal ljudfiler")
         plt.title(format_title(species, int(plot_data.values.sum()), night_label))
@@ -1188,7 +885,7 @@ def _plot_for_subset(df_subset, custom_time_range, y_lim_global,
             .reindex(all_intervals, fill_value=0)
             .reindex(columns=type_order, fill_value=0)
         )
-        ymax_bar_sp = compute_ymax_with_headroom(plot_data.sum(axis=1).max()) if ymax_mode == "zoomed" else y_lim_global
+        ymax_bar_sp = compute_ymax_with_headroom(plot_data.sum(axis=1).max(), headroom_factor=1.10) if ymax_mode == "zoomed" else y_lim_global
         ax = plot_data.plot(kind="bar", stacked=True, color=colors_nvi, figsize=(14, 6))
         plt.xlabel("Tid (15-minutersintervall)"); plt.ylabel("Antal ljudfiler")
         plt.title(format_title(species, int(plot_data.values.sum()), night_label))
