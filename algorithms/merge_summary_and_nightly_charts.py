@@ -66,10 +66,13 @@ def report_progress(pct: int, msg: str) -> None:
 
             p = os.path.abspath(progress_path_str)
             os.makedirs(os.path.dirname(p), exist_ok=True)
-            with open(p, "w", encoding="utf-8") as f:
+            tmp_p = f"{p}.tmp"
+            with open(tmp_p, "w", encoding="utf-8") as f:
                 json.dump({"progress": pct, "progress_message": msg}, f)
+            os.replace(tmp_p, p)
         except Exception:
             pass
+
 
 
 # =============== Ordbok Latin → Svenska ===============
