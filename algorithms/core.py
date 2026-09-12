@@ -115,6 +115,40 @@ LATIN_TO_SV = {
 }
 SPECIAL_TAIL = {"nyctaloid", "chiroptera"}
 
+CODE_TO_LATIN = {
+    "NYCNOC": "Nyctalus noctula",
+    "PLEUAR": "Plecotus auritus",
+    "VESMUR": "Vespertilio murinus",
+    "PIPNAT": "Pipistrellus nathusii",
+    "PIPPYG": "Pipistrellus pygmaeus",
+    "PIPKUH": "Pipistrellus kuhlii",
+    "PIPPIP": "Pipistrellus pipistrellus",
+    "EPTNIL": "Eptesicus nilssonii",
+    "EPTSER": "Eptesicus serotinus",
+    "MYODAB": "Myotis daubentonii",
+    "MYOMYS": "Myotis mystacinus",
+    "MYONAT": "Myotis nattereri",
+    "MYODAS": "Myotis dasycneme",
+    "MYOBEC": "Myotis bechsteinii",
+    "MYOALC": "Myotis alcathoe",
+    "MYOBRA": "Myotis brandtii",
+    "BARBAR": "Barbastella barbastellus",
+    "NYCLEI": "Nyctalus leisleri",
+}
+
+
+def get_swedish_species_name(sp: str) -> str:
+    sp_str = str(sp).strip()
+    if not sp_str:
+        return sp_str
+    if sp_str in LATIN_TO_SV and LATIN_TO_SV[sp_str]:
+        return LATIN_TO_SV[sp_str]
+    latin = CODE_TO_LATIN.get(sp_str.upper(), sp_str)
+    sv = LATIN_TO_SV.get(latin)
+    if sv:
+        return sv
+    return sp_str
+
 
 def safe_sheet_name(path: str, used: set) -> str:
     base = os.path.splitext(os.path.basename(path))[0]
@@ -677,11 +711,12 @@ def _plot_all_species_grouped_stacked(
     """Plot grouped stacked bar chart for all species across time intervals (#9).
     
     Layout specifications:
-    - Every 15-minute interval in `all_intervals` occupies a fixed equal-width horizontal slot.
-    - Empty 15-minute intervals remain visible as empty slots on the timeline.
-    - Within each fixed slot, render only species actually present (no zero bars).
-    - Species bars are narrow and centered within the interval's fixed slot.
-    - Time labels are centered under each fixed slot position.
+    - Dual horizontal axes:
+        * Top axis (`ax_top`): 15-minute time labels centered over equal-width slots.
+        * Bottom axis (`ax`): Vertical species labels directly under rendered species bars.
+    - Subtle vertical dotted separators between adjacent 15-minute time slots.
+    - Stacked bar count annotation centered above each non-zero species stack.
+    - Equal-width 15-minute slot geometry and adaptive non-overlapping bar widths preserved.
     """
     if not all_intervals:
         return
@@ -698,27 +733,31 @@ def _plot_all_species_grouped_stacked(
 
     num_intervals = len(all_intervals)
     fig_w = max(12, int(num_intervals * 0.5))
-    plt.figure(figsize=(fig_w, 7))
-    ax = plt.gca()
+    fig, ax = plt.subplots(figsize=(fig_w, 7))
+    ax_top = ax.twiny()
 
-    # Fixed slot step for every interval in all_intervals
     slot_step = 1.0
-    bar_width = 0.18
-
     legend_handles = {}
 
-    # Map grouped items by interval
     items_by_interval: dict[str, list[dict]] = {}
     for item in grouped_items:
         items_by_interval.setdefault(item["interval"], []).append(item)
 
-    x_tick_positions = []
-    x_tick_labels = []
+    top_tick_positions = []
+    top_tick_labels = []
+
+    species_tick_positions = []
+    species_tick_labels = []
 
     for idx, intv in enumerate(all_intervals):
         slot_center = idx * slot_step
-        x_tick_positions.append(slot_center)
-        x_tick_labels.append(str(intv))
+        top_tick_positions.append(slot_center)
+        top_tick_labels.append(str(intv))
+
+        # Subtle vertical dotted separator between adjacent time slots
+        if idx < num_intervals - 1:
+            x_sep = slot_center + slot_step / 2.0
+            ax.axvline(x=x_sep, color="#cccccc", linestyle=":", linewidth=0.8, zorder=0)
 
         intv_items = items_by_interval.get(intv, [])
         k = len(intv_items)
@@ -728,7 +767,6 @@ def _plot_all_species_grouped_stacked(
         # Compute horizontal spacing and adaptive bar width inside this fixed slot (#9)
         species_spacing = min(0.22, 0.80 / k)
         current_bar_width = min(0.18, species_spacing * 0.80)
-        sp_fontsize = 8 if k <= 4 else (6 if k <= 7 else 5)
 
         for j, item in enumerate(intv_items):
             x_pos = slot_center + (j - (k - 1) / 2.0) * species_spacing
@@ -752,23 +790,38 @@ def _plot_all_species_grouped_stacked(
                         legend_handles[ot] = bar_container[0]
                     bottom += val
 
-            sv_name = LATIN_TO_SV.get(sp)
-            sp_label = sv_name if sv_name else sp
-            ax.text(
-                x_pos,
-                -chart_ymax * 0.02,
-                sp_label,
-                rotation=90,
-                ha="center",
-                va="top",
-                fontsize=sp_fontsize,
-            )
+            total_count = item["total_count"]
+            if total_count > 0:
+                ax.text(
+                    x_pos,
+                    bottom + chart_ymax * 0.01,
+                    str(total_count),
+                    ha="center",
+                    va="bottom",
+                    fontsize=7,
+                    fontweight="bold",
+                )
 
-    ax.set_xticks(x_tick_positions)
-    ax.set_xticklabels(x_tick_labels, rotation=270)
-    ax.set_xlabel("Tid (15-minutersintervall)", labelpad=70)
+            sp_label = get_swedish_species_name(sp)
+            species_tick_positions.append(x_pos)
+            species_tick_labels.append(sp_label)
+
+    # Set up axes geometry and limits
+    x_min = -0.5
+    x_max = num_intervals * slot_step - 0.5
+    ax.set_xlim(x_min, x_max)
+    ax_top.set_xlim(x_min, x_max)
+
+    # Top axis (15-minute time intervals)
+    ax_top.set_xticks(top_tick_positions)
+    ax_top.set_xticklabels(top_tick_labels, rotation=90)
+    ax_top.set_xlabel("Tid (15-minutersintervall)", labelpad=10)
+    ax_top.set_title(title_text, pad=50)
+
+    # Bottom axis (species)
+    ax.set_xticks(species_tick_positions)
+    ax.set_xticklabels(species_tick_labels, rotation=90)
     ax.set_ylabel("Antal ljudfiler")
-    ax.set_title(title_text)
 
     if legend_handles:
         handles = [legend_handles[ot] for ot in type_order if ot in legend_handles]
@@ -777,9 +830,9 @@ def _plot_all_species_grouped_stacked(
 
     ax.yaxis.set_major_locator(MaxNLocator(integer=True))
     ax.set_ylim(0, chart_ymax)
-    ax.set_xlim(-0.8, num_intervals * slot_step - 0.2)
-    plt.grid(True, axis="y")
+    ax.grid(True, axis="y")
     plt.tight_layout()
     plt.savefig(out_path)
     plt.close()
+
 

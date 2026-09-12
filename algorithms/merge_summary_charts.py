@@ -772,7 +772,7 @@ def generate_bat_diagrams(input_files_list, diagrams_root, custom_time_range, cu
             type_order=type_order,
             color_dict=art_color_dict,
             out_path=os.path.join(output_dir_stacks_art, "alla_arter.png"),
-            title_text=f"Fladdermusobservationer – alla arter, antal observerade beteenden: {total_obs}",
+            title_text=f"Fladdermusobservationer – alla arter (ART), antal observerade beteenden: {total_obs}",
             ymax_mode="fixed",
             y_lim_global=y_lim_global,
         )
@@ -809,7 +809,7 @@ def generate_bat_diagrams(input_files_list, diagrams_root, custom_time_range, cu
             type_order=type_order,
             color_dict=nvi_color_dict,
             out_path=os.path.join(output_dir_stacks_nvi, "alla_arter.png"),
-            title_text=f"Fladdermusobservationer – alla arter, antal observerade beteenden: {total_obs}",
+            title_text=f"Fladdermusobservationer – alla arter (NVI), antal observerade beteenden: {total_obs}",
             ymax_mode="fixed",
             y_lim_global=y_lim_global,
         )

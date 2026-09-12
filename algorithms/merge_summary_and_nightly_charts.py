@@ -688,9 +688,9 @@ def _plot_for_subset(df_subset, custom_time_range, y_lim_global,
         plt.savefig(os.path.join(out_stacks_nvi, f"{safe_filename(species)}.png")); plt.close()
 
     # ALL-SPECIES GROUPED STACKED CHART (#9)
-    title_all_stacked = "Fladdermusobservationer – alla arter"
-    if night_label: title_all_stacked += f" – natt {night_label}"
-    title_all_stacked += f", antal observerade beteenden: {total_obs}"
+    night_part = f" – natt {night_label}" if night_label else ""
+    title_art = f"Fladdermusobservationer – alla arter (ART){night_part}, antal observerade beteenden: {total_obs}"
+    title_nvi = f"Fladdermusobservationer – alla arter (NVI){night_part}, antal observerade beteenden: {total_obs}"
 
     # ART version
     core._plot_all_species_grouped_stacked(
@@ -700,7 +700,7 @@ def _plot_for_subset(df_subset, custom_time_range, y_lim_global,
         type_order=type_order,
         color_dict=art_color_dict,
         out_path=os.path.join(out_stacks_art, "alla_arter.png"),
-        title_text=title_all_stacked,
+        title_text=title_art,
         ymax_mode=ymax_mode,
         y_lim_global=y_lim_global,
     )
@@ -713,7 +713,7 @@ def _plot_for_subset(df_subset, custom_time_range, y_lim_global,
         type_order=type_order,
         color_dict=nvi_color_dict,
         out_path=os.path.join(out_stacks_nvi, "alla_arter.png"),
-        title_text=title_all_stacked,
+        title_text=title_nvi,
         ymax_mode=ymax_mode,
         y_lim_global=y_lim_global,
     )

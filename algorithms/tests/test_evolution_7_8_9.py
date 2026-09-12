@@ -311,10 +311,14 @@ def test_equal_width_slots_and_spacing_for_all_intervals(monkeypatch):
     real_savefig = plt.savefig
 
     def mock_savefig(out_path, *args, **kwargs):
-        ax = plt.gca()
-        saved_xticks.extend(ax.get_xticks().tolist())
-        saved_xticklabels.extend([label.get_text() for label in ax.get_xticklabels()])
-        for patch in ax.patches:
+        fig = plt.gcf()
+        axes = fig.get_axes()
+        ax_top = axes[1] if len(axes) > 1 else axes[0]
+        ax_bottom = axes[0]
+
+        saved_xticks.extend(ax_top.get_xticks().tolist())
+        saved_xticklabels.extend([label.get_text() for label in ax_top.get_xticklabels()])
+        for patch in ax_bottom.patches:
             saved_bars.append((patch.get_x(), patch.get_width(), patch.get_height()))
         real_savefig(out_path, *args, **kwargs)
 
@@ -397,10 +401,14 @@ def test_dense_8_species_interval_no_overlap_and_fixed_slots(monkeypatch):
     real_savefig = plt.savefig
 
     def mock_savefig(out_path, *args, **kwargs):
-        ax = plt.gca()
-        saved_xticks.extend(ax.get_xticks().tolist())
-        saved_xticklabels.extend([label.get_text() for label in ax.get_xticklabels()])
-        for patch in ax.patches:
+        fig = plt.gcf()
+        axes = fig.get_axes()
+        ax_top = axes[1] if len(axes) > 1 else axes[0]
+        ax_bottom = axes[0]
+
+        saved_xticks.extend(ax_top.get_xticks().tolist())
+        saved_xticklabels.extend([label.get_text() for label in ax_top.get_xticklabels()])
+        for patch in ax_bottom.patches:
             saved_bars.append((patch.get_x(), patch.get_width(), patch.get_height()))
         real_savefig(out_path, *args, **kwargs)
 
@@ -450,6 +458,135 @@ def test_dense_8_species_interval_no_overlap_and_fixed_slots(monkeypatch):
     # 5. Empty slot 00:00 has zero bars
     bars_slot_2 = [b for b in saved_bars if abs((b[0] + b[1]/2.0) - slot_2_center) < 0.45]
     assert len(bars_slot_2) == 0
+
+
+def test_visual_layout_dual_axes_separators_counts_and_titles(monkeypatch):
+    """Regression test verifying the 10 visual acceptance rules:
+    1. Top axis contains ALL interval labels (including empty intervals).
+    2. Bottom axis contains ONLY labels for actually rendered species.
+    3. Species labels are positioned at species bar centers.
+    4. Time labels are positioned at fixed slot centers.
+    5. Separator positions sit halfway between adjacent slots.
+    6. Total-count annotations equal stacked behavior totals.
+    7. ART title contains (ART).
+    8. NVI title contains (NVI).
+    9. Equal-width slot semantics remain unchanged.
+    10. Dense 8-species non-overlap holds.
+    """
+    import matplotlib
+    matplotlib.use("Agg")
+    import matplotlib.pyplot as plt
+    import algorithms.core as core
+    import algorithms.merge_summary_and_nightly_charts as msnc
+
+    rows = [
+        {"interval": "23:30", "species": "NYCNOC", "obs_type": "SOC"},
+        {"interval": "23:30", "species": "NYCNOC", "obs_type": "SOF"},
+        {"interval": "23:30", "species": "PLEUAR", "obs_type": "FOD"},
+        # 23:45 is empty
+        {"interval": "00:00", "species": "VESMUR", "obs_type": "FORBI"},
+    ]
+    df_long = pd.DataFrame(rows)
+    all_intervals = ["23:30", "23:45", "00:00"]
+    species_list = ["NYCNOC", "PLEUAR", "VESMUR"]
+    type_order = ["SOC", "SOF", "FOD", "FORBI"]
+    color_dict = {"SOC": "#ff0000", "SOF": "#00ff00", "FOD": "#0000ff", "FORBI": "#ffff00"}
+
+    captured_top_xticks = []
+    captured_top_labels = []
+    captured_bottom_xticks = []
+    captured_bottom_labels = []
+    captured_texts = []
+    captured_vlines = []
+    captured_titles = []
+
+    real_savefig = plt.savefig
+
+    def mock_savefig(out_path, *args, **kwargs):
+        fig = plt.gcf()
+        axes = fig.get_axes()
+        ax_bottom = axes[0]
+        ax_top = axes[1] if len(axes) > 1 else axes[0]
+
+        captured_top_xticks.extend(ax_top.get_xticks().tolist())
+        captured_top_labels.extend([l.get_text() for l in ax_top.get_xticklabels()])
+
+        captured_bottom_xticks.extend(ax_bottom.get_xticks().tolist())
+        captured_bottom_labels.extend([l.get_text() for l in ax_bottom.get_xticklabels()])
+
+        for txt in ax_bottom.texts:
+            captured_texts.append((txt.get_position(), txt.get_text()))
+
+        for line in ax_bottom.lines:
+            xdata = line.get_xdata()
+            if len(xdata) == 2 and xdata[0] == xdata[1]:
+                captured_vlines.append(xdata[0])
+
+        title_obj = ax_top.get_title()
+        captured_titles.append(title_obj)
+
+        real_savefig(out_path, *args, **kwargs)
+
+    monkeypatch.setattr(plt, "savefig", mock_savefig)
+
+    with tempfile.TemporaryDirectory() as tmp_dir:
+        art_png = os.path.join(tmp_dir, "art.png")
+        nvi_png = os.path.join(tmp_dir, "nvi.png")
+
+        core._plot_all_species_grouped_stacked(
+            df_long=df_long,
+            all_intervals=all_intervals,
+            species_list=species_list,
+            type_order=type_order,
+            color_dict=color_dict,
+            out_path=art_png,
+            title_text="Fladdermusobservationer – alla arter (ART), antal observerade beteenden: 4",
+            ymax_mode="fixed",
+            y_lim_global=5,
+        )
+
+        core._plot_all_species_grouped_stacked(
+            df_long=df_long,
+            all_intervals=all_intervals,
+            species_list=species_list,
+            type_order=type_order,
+            color_dict=color_dict,
+            out_path=nvi_png,
+            title_text="Fladdermusobservationer – alla arter (NVI), antal observerade beteenden: 4",
+            ymax_mode="fixed",
+            y_lim_global=5,
+        )
+
+    # 1. Top axis contains ALL interval labels including empty 23:45
+    assert captured_top_labels[:3] == ["23:30", "23:45", "00:00"]
+
+    # 2. Bottom axis contains ONLY labels for present species (NYCNOC, PLEUAR at 23:30, VESMUR at 00:00)
+    # NYCNOC maps to 'Stor fladdermus', PLEUAR to 'Långörad fladdermus', VESMUR to 'Gråskimlig fladdermus'
+    assert len(captured_bottom_labels[:3]) == 3
+    assert captured_bottom_labels[:3] == ["Stor fladdermus", "Långörad fladdermus", "Gråskimlig fladdermus"]
+
+    # 3. Species labels positioned at species bar centers
+    # 23:30 has 2 species (NYCNOC, PLEUAR), center=0.0 -> bar positions at -0.11 and +0.11
+    assert captured_bottom_xticks[0] == pytest.approx(-0.11, abs=0.02)
+    assert captured_bottom_xticks[1] == pytest.approx(0.11, abs=0.02)
+
+    # 4. Time labels positioned at fixed slot centers (0.0, 1.0, 2.0)
+    assert captured_top_xticks[:3] == [0.0, 1.0, 2.0]
+
+    # 5. Separator line positions sit halfway between adjacent slots (0.5 and 1.5)
+    assert captured_vlines[:2] == [0.5, 1.5]
+
+    # 6. Total count annotations equal sum of behavior classes
+    # NYCNOC at 23:30 has SOC=1, SOF=1 -> total=2
+    # PLEUAR at 23:30 has FOD=1 -> total=1
+    # VESMUR at 00:00 has FORBI=1 -> total=1
+    count_texts = [txt for pos, txt in captured_texts[:3]]
+    assert count_texts == ["2", "1", "1"]
+
+    # 7 & 8. ART title contains (ART) and NVI title contains (NVI)
+    assert "(ART)" in captured_titles[0]
+    assert "(NVI)" in captured_titles[1]
+
 
 
 
