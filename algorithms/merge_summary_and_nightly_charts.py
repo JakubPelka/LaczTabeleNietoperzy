@@ -28,6 +28,7 @@ except ModuleNotFoundError:  # Direct execution from the algorithms directory.
     from input_reader import read_input_table
 
 try:
+    import algorithms.core as core
     from algorithms.core import (
         BORDER_MEDIUM,
         DEFAULT_OUT_BASENAME,
@@ -39,7 +40,6 @@ try:
         LATIN_TO_SV,
         _compute_ymax_for_subset,
         _hm_from_any,
-        _plot_all_species_grouped_stacked,
         _validate_hex,
         build_all_species_grouped_data,
         build_manual_interval_sequence,
@@ -70,6 +70,7 @@ try:
         validate_hhmm,
     )
 except ModuleNotFoundError:
+    import core
     from core import (
         BORDER_MEDIUM,
         DEFAULT_OUT_BASENAME,
@@ -81,7 +82,6 @@ except ModuleNotFoundError:
         LATIN_TO_SV,
         _compute_ymax_for_subset,
         _hm_from_any,
-        _plot_all_species_grouped_stacked,
         _validate_hex,
         build_all_species_grouped_data,
         build_manual_interval_sequence,
@@ -203,9 +203,10 @@ def gui_collect_settings(default_basename=DEFAULT_OUT_BASENAME):
             def choose():
                 init = _validate_hex(var.get()) or "#FFFFFF"
                 _, hx = colorchooser.askcolor(color=init, title="Välj färg")
-                if hx: var.set(hx.upper())
-                ttk.Button(lf_colors, text="Välj…", command=choose)\
-                    .grid(row=row, column=3 + col_ix*3, padx=(0,4), pady=(8,2), sticky="w")
+                if hx:
+                    var.set(hx.upper())
+            ttk.Button(lf_colors, text="Välj…", command=choose)\
+                .grid(row=row, column=3 + col_ix*3, padx=(0,4), pady=(8,2), sticky="w")
         for i, v in enumerate(vars_tuple): one(i, v)
     var_nvi_soc=tk.StringVar(value=""); var_nvi_sof=tk.StringVar(value=""); var_nvi_fodo=tk.StringVar(value=""); var_nvi_forbi=tk.StringVar(value="")
     var_art_soc=tk.StringVar(value=""); var_art_sof=tk.StringVar(value=""); var_art_fodo=tk.StringVar(value=""); var_art_forbi=tk.StringVar(value="")
@@ -542,214 +543,6 @@ def run_analysis(settings: dict):
 
 
 # ================== STEG 2: Diagram (linje + stapel) ==================
-def _compute_ymax_for_subset(df_subset, custom_time_range, code_map=None):
-    if df_subset.empty: return 0
-    df = df_subset.copy()
-    if "MANUAL ID" not in df.columns: return 0
-
-    time_col = detect_column(df, ["time", "tid"])
-    if time_col is None: return 0
-
-    if custom_time_range:
-        start_str, stop_str = custom_time_range
-        df = df[df[time_col].apply(lambda t: is_time_in_range(t, start_str, stop_str))]
-        if df.empty: return 0
-
-    df["species_type_list"] = df["MANUAL ID"].map(extract_species_and_type)
-
-    def time_to_interval(val):
-        hm = _hm_from_any(val)
-        if hm is None: return ""
-        h, m = hm; minutes = int((m // 15) * 15)
-        return f"{h:02d}:{minutes:02d}"
-    df["interval"] = df[time_col].map(time_to_interval)
-
-    df_long = df.explode("species_type_list")
-    df_long = df_long[df_long["species_type_list"].notna()]
-    if df_long.empty: return 0
-    df_long[["species", "obs_code"]] = pd.DataFrame(df_long["species_type_list"].tolist(), index=df_long.index)
-    if code_map:
-        df_long["obs_type"] = df_long["obs_code"].map(code_map)
-    else:
-        df_long["obs_type"] = df_long["obs_code"]
-
-    df_long = df_long[df_long["species"].astype(str).str.strip().str.lower() != "noise"]
-    df_long = df_long[df_long["species"].astype(str).str.strip() != ""]
-    if df_long.empty: return 0
-
-    if custom_time_range:
-        all_intervals = build_manual_interval_sequence(custom_time_range)
-    else:
-        dt_series = df[time_col].apply(str_to_dt).dropna()
-        if len(dt_series) == 0:
-            ints = [s for s in df["interval"].astype(str).tolist() if s and s.lower() != "nan"]
-            dt_from_int = [interval_to_sortkey(s) for s in ints]
-            dt_from_int = [d for d in dt_from_int if d is not None]
-            if not dt_from_int: return 0
-            min_dt = round_down_15(min(dt_from_int)); max_dt = round_up_15(max(dt_from_int))
-        else:
-            min_dt = round_down_15(min(dt_series)); max_dt = round_up_15(max(dt_series))
-
-        all_intervals = []
-        t = min_dt
-        while t <= max_dt:
-            all_intervals.append(t.strftime("%H:%M")); t += timedelta(minutes=15)
-        all_intervals = list(dict.fromkeys(all_intervals))
-
-    agg = df_long.groupby(["interval", "species", "obs_type"]).size().reset_index(name="antal")
-    agg["interval"] = pd.Categorical(agg["interval"], categories=all_intervals, ordered=True)
-
-    y_max = 0
-    for sp in df_long["species"].unique():
-        plot_data = (
-            agg[agg["species"] == sp]
-            .pivot(index="interval", columns="obs_type", values="antal")
-            .fillna(0)
-            .reindex(all_intervals, fill_value=0)
-        )
-        if not plot_data.empty:
-            y_max = max(y_max, int(plot_data.sum(axis=1).max()))
-    return y_max
-
-def compute_global_ymax_across_files(input_files_list, custom_time_range, code_map=None):
-    y_global = 0
-    for path in input_files_list:
-        df = read_input_table(path)
-        y_global = max(y_global, _compute_ymax_for_subset(df, custom_time_range, code_map=code_map))
-    return compute_ymax_with_headroom(y_global)
-
-def compute_global_ymax_across_files_and_nights(input_files_list, custom_time_range, code_map=None):
-    y_global = 0
-    for path in input_files_list:
-        df_full = read_input_table(path)
-        date_col = detect_column(df_full, ["date", "datum"])
-        time_col = detect_column(df_full, ["time", "tid"])
-        if not date_col:
-            y_global = max(y_global, _compute_ymax_for_subset(df_full, custom_time_range, code_map=code_map)); continue
-        df_full["__night"] = df_full.apply(lambda r: row_night_key(r[date_col], r[time_col] if time_col in r else None), axis=1)
-        for night_key, sub in df_full.groupby("__night"):
-            if night_key is None: continue
-            y_global = max(y_global, _compute_ymax_for_subset(sub, custom_time_range, code_map=code_map))
-    return compute_ymax_with_headroom(y_global)
-
-def night_label_str(night_start: date) -> str:
-    nxt = night_start + timedelta(days=1)
-    return f"{night_start.day}/{nxt.day}.{night_start.month:02d}"
-
-
-def _plot_all_species_grouped_stacked(
-    df_long,
-    all_intervals,
-    species_list,
-    type_order,
-    color_dict,
-    out_path,
-    title_text,
-    ymax_mode,
-    y_lim_global
-):
-    """Plot grouped stacked bar chart for all species across time intervals (#9)."""
-    if df_long.empty or not species_list or not all_intervals:
-        return
-
-    agg = df_long.groupby(["interval", "species", "obs_type"]).size().reset_index(name="antal")
-
-    data_map = {}
-    for interval in all_intervals:
-        for sp in species_list:
-            data_map[(str(interval), str(sp))] = {}
-
-    for _, row in agg.iterrows():
-        intv = str(row["interval"])
-        sp = str(row["species"])
-        ot = str(row["obs_type"])
-        cnt = int(row["antal"])
-        if (intv, sp) in data_map:
-            data_map[(intv, sp)][ot] = cnt
-
-    max_bar_h = 0
-    for (intv, sp), class_counts in data_map.items():
-        bar_h = sum(class_counts.values())
-        if bar_h > max_bar_h:
-            max_bar_h = bar_h
-
-    if ymax_mode == "zoomed":
-        chart_ymax = compute_ymax_with_headroom(max_bar_h, headroom_factor=1.10)
-    else:
-        chart_ymax = y_lim_global
-
-    num_intervals = len(all_intervals)
-    num_species = len(species_list)
-
-    fig_w = max(14, int(num_intervals * max(1.2, num_species * 0.35)))
-    plt.figure(figsize=(fig_w, 7))
-    ax = plt.gca()
-
-    group_width = 0.8
-    bar_width = group_width / num_species
-
-    legend_handles = {}
-    x_tick_positions = []
-    x_tick_labels = []
-
-    for j, intv in enumerate(all_intervals):
-        group_center = j
-        x_tick_positions.append(group_center)
-        x_tick_labels.append(intv)
-
-        for i, sp in enumerate(species_list):
-            x_pos = group_center - (group_width / 2.0) + (i + 0.5) * bar_width
-            class_counts = data_map.get((str(intv), str(sp)), {})
-
-            bottom = 0
-            for ot in type_order:
-                val = class_counts.get(ot, 0)
-                color = color_dict.get(ot, "#000000")
-                if val > 0:
-                    bar_container = ax.bar(
-                        x_pos,
-                        val,
-                        bottom=bottom,
-                        width=bar_width * 0.9,
-                        color=color,
-                        edgecolor="none"
-                    )
-                    if ot not in legend_handles:
-                        legend_handles[ot] = bar_container[0]
-                    bottom += val
-
-            sv_name = LATIN_TO_SV.get(sp)
-            sp_label = sv_name if sv_name else sp
-            ax.text(
-                x_pos,
-                -chart_ymax * 0.02,
-                sp_label,
-                rotation=90,
-                ha="center",
-                va="top",
-                fontsize=7
-            )
-
-    ax.set_xticks(x_tick_positions)
-    ax.set_xticklabels(x_tick_labels, rotation=270)
-    ax.set_xlabel("Tid (15-minutersintervall)", labelpad=70)
-    ax.set_ylabel("Antal ljudfiler")
-    ax.set_title(title_text)
-
-    if legend_handles:
-        handles = [legend_handles[ot] for ot in type_order if ot in legend_handles]
-        labels = [ot for ot in type_order if ot in legend_handles]
-        ax.legend(handles, labels, title="Beteendetyper", bbox_to_anchor=(1.02, 1), loc="upper left")
-
-    ax.yaxis.set_major_locator(MaxNLocator(integer=True))
-    ax.set_ylim(0, chart_ymax)
-    ax.set_xlim(-0.8, num_intervals - 0.2)
-    plt.grid(True, axis="y")
-    plt.tight_layout()
-    plt.savefig(out_path)
-    plt.close()
-
-
 def _plot_for_subset(df_subset, custom_time_range, y_lim_global,
                      out_lines, out_stacks_art, out_stacks_nvi,
                      ymax_mode: str, class_cfg: dict,
@@ -900,7 +693,7 @@ def _plot_for_subset(df_subset, custom_time_range, y_lim_global,
     title_all_stacked += f", antal observerade beteenden: {total_obs}"
 
     # ART version
-    _plot_all_species_grouped_stacked(
+    core._plot_all_species_grouped_stacked(
         df_long=df_long,
         all_intervals=all_intervals,
         species_list=species_list,
@@ -913,7 +706,7 @@ def _plot_for_subset(df_subset, custom_time_range, y_lim_global,
     )
 
     # NVI version
-    _plot_all_species_grouped_stacked(
+    core._plot_all_species_grouped_stacked(
         df_long=df_long,
         all_intervals=all_intervals,
         species_list=species_list,

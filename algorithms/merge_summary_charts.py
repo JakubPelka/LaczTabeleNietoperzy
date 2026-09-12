@@ -23,6 +23,7 @@ except ModuleNotFoundError:  # Direct execution from the algorithms directory.
     from input_reader import read_input_table
 
 try:
+    import algorithms.core as core
     from algorithms.core import (
         BORDER_MEDIUM,
         DEFAULT_OUT_BASENAME,
@@ -34,7 +35,6 @@ try:
         LATIN_TO_SV,
         SPECIAL_TAIL,
         _hm_from_any,
-        _plot_all_species_grouped_stacked,
         _validate_hex,
         build_all_species_grouped_data,
         build_manual_interval_sequence,
@@ -58,6 +58,7 @@ try:
         str_to_dt,
     )
 except ModuleNotFoundError:
+    import core
     from core import (
         BORDER_MEDIUM,
         DEFAULT_OUT_BASENAME,
@@ -69,7 +70,6 @@ except ModuleNotFoundError:
         LATIN_TO_SV,
         SPECIAL_TAIL,
         _hm_from_any,
-        _plot_all_species_grouped_stacked,
         _validate_hex,
         build_all_species_grouped_data,
         build_manual_interval_sequence,
@@ -765,7 +765,7 @@ def generate_bat_diagrams(input_files_list, diagrams_root, custom_time_range, cu
             plt.savefig(os.path.join(output_dir_stacks_art, f"{safe_filename(species)}.png"))
             plt.close()
 
-        _plot_all_species_grouped_stacked(
+        core._plot_all_species_grouped_stacked(
             df_long=df_long,
             all_intervals=all_intervals,
             species_list=species_list,
@@ -802,7 +802,7 @@ def generate_bat_diagrams(input_files_list, diagrams_root, custom_time_range, cu
             plt.savefig(os.path.join(output_dir_stacks_nvi, f"{safe_filename(species)}.png"))
             plt.close()
 
-        _plot_all_species_grouped_stacked(
+        core._plot_all_species_grouped_stacked(
             df_long=df_long,
             all_intervals=all_intervals,
             species_list=species_list,

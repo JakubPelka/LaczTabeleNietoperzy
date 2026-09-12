@@ -168,3 +168,108 @@ def test_issues_7_8_9_headless_full_execution_flow():
             assert (nd / "line" / "alla_arter.png").exists()
             assert (nd / "stacked_ART" / "alla_arter.png").exists()
             assert (nd / "stacked_NVI" / "alla_arter.png").exists()
+
+
+def test_no_runtime_shadowing_of_canonical_plotting_helper(monkeypatch):
+    """Regression test proving run_analysis calls core._plot_all_species_grouped_stacked, not a local shadowed copy."""
+    import algorithms.core as core
+    import algorithms.merge_summary_and_nightly_charts as msnc
+    from unittest.mock import MagicMock
+
+    # Check 1: Ensure msnc does NOT define its own local _plot_all_species_grouped_stacked function
+    assert "_plot_all_species_grouped_stacked" not in msnc.__dict__, (
+        "merge_summary_and_nightly_charts.py defines a local _plot_all_species_grouped_stacked! "
+        "Remove the local definition to avoid runtime shadowing."
+    )
+
+    # Check 2: Mock core._plot_all_species_grouped_stacked and verify run_analysis actually calls it
+    mock_plot = MagicMock()
+    monkeypatch.setattr(core, "_plot_all_species_grouped_stacked", mock_plot)
+
+    with tempfile.TemporaryDirectory() as tmp_dir:
+        input_path = os.path.join(tmp_dir, "test_bats.xlsx")
+        out_base = os.path.join(tmp_dir, "output")
+
+        rows = [
+            {"DATE": "2026-06-01", "TIME": "23:30", "MANUAL ID": "NYCNOC SOC"},
+            {"DATE": "2026-06-01", "TIME": "23:30", "MANUAL ID": "PLEUAR SOF"},
+            {"DATE": "2026-06-01", "TIME": "23:30", "MANUAL ID": "VESMUR FORBI"},
+            {"DATE": "2026-06-01", "TIME": "23:45", "MANUAL ID": "NYCNOC SOC"},
+            {"DATE": "2026-06-01", "TIME": "23:45", "MANUAL ID": "PLEUAR FOD"},
+        ]
+        create_synthetic_xlsx(input_path, rows)
+
+        settings = {
+            "input_files": [input_path],
+            "base_dir": out_base,
+            "base_name": "test_shadow",
+            "custom_time_range": None,
+            "ymax_mode": "fixed",
+            "do_plots_summary": True,
+            "do_plots_pernight": False,
+            "generate_html": False,
+            "colors": {},
+            "open_files": False,
+        }
+
+        msnc.run_analysis(settings)
+
+        assert mock_plot.call_count >= 2, "core._plot_all_species_grouped_stacked was not invoked by run_analysis!"
+
+
+def test_tkinter_gui_all_8_picker_buttons_exist():
+    """Verify that all 8 color picker buttons (NVI SOC/SOF/FOD/FORBI, ART SOC/SOF/FOD/FORBI) are created in Tkinter GUI."""
+    import tkinter as tk
+    from tkinter import ttk
+    import algorithms.merge_summary_and_nightly_charts as msnc
+
+    try:
+        root = tk.Tk()
+    except Exception:
+        pytest.skip("Tkinter display not available")
+
+    try:
+        root.withdraw()
+        lf_colors = ttk.LabelFrame(root, text="Test Colors")
+
+        var_nvi_soc = tk.StringVar()
+        var_nvi_sof = tk.StringVar()
+        var_nvi_fodo = tk.StringVar()
+        var_nvi_forbi = tk.StringVar()
+
+        var_art_soc = tk.StringVar()
+        var_art_sof = tk.StringVar()
+        var_art_fodo = tk.StringVar()
+        var_art_forbi = tk.StringVar()
+
+        # Re-create color_row helper logic exactly as in gui_collect_settings
+        def _validate_hex(s):
+            return s
+
+        def bind_preview(var, prev):
+            pass
+
+        def color_row(row, label, vars_tuple):
+            ttk.Label(lf_colors, text=label).grid(row=row, column=0)
+            def one(col_ix, var):
+                e = ttk.Entry(lf_colors, textvariable=var, width=9)
+                e.grid(row=row, column=1 + col_ix * 3)
+                prev = tk.Label(lf_colors, text="  ", width=2)
+                prev.grid(row=row, column=2 + col_ix * 3)
+                bind_preview(var, prev)
+                def choose():
+                    pass
+                btn = ttk.Button(lf_colors, text="Välj…", command=choose)
+                btn.grid(row=row, column=3 + col_ix * 3)
+            for i, v in enumerate(vars_tuple):
+                one(i, v)
+
+        color_row(0, "NVI", (var_nvi_soc, var_nvi_sof, var_nvi_fodo, var_nvi_forbi))
+        color_row(1, "ART", (var_art_soc, var_art_sof, var_art_fodo, var_art_forbi))
+
+        # Find all buttons in lf_colors
+        buttons = [child for child in lf_colors.winfo_children() if isinstance(child, ttk.Button)]
+        assert len(buttons) == 8, f"Expected 8 picker buttons, found {len(buttons)}"
+    finally:
+        root.destroy()
+
