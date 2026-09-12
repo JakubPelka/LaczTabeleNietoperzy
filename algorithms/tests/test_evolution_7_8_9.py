@@ -273,3 +273,98 @@ def test_tkinter_gui_all_8_picker_buttons_exist():
     finally:
         root.destroy()
 
+
+def test_equal_width_slots_and_spacing_for_all_intervals(monkeypatch):
+    """Regression test proving equal interval centers / spacing for:
+    - 23:30 with 3 species,
+    - 23:45 with 2 species,
+    - 00:00 with 0 species (empty slot),
+    - 00:15 with 1 species.
+    """
+    import matplotlib
+    matplotlib.use("Agg")
+    import matplotlib.pyplot as plt
+    import algorithms.core as core
+
+    rows = [
+        # 23:30 with 3 species
+        {"interval": "23:30", "species": "NYCNOC", "obs_type": "SOC"},
+        {"interval": "23:30", "species": "PLEUAR", "obs_type": "SOF"},
+        {"interval": "23:30", "species": "VESMUR", "obs_type": "FORBI"},
+        # 23:45 with 2 species
+        {"interval": "23:45", "species": "NYCNOC", "obs_type": "SOC"},
+        {"interval": "23:45", "species": "PLEUAR", "obs_type": "FOD"},
+        # 00:00 with 0 species (no rows in df_long)
+        # 00:15 with 1 species
+        {"interval": "00:15", "species": "NYCNOC", "obs_type": "SOC"},
+    ]
+    df_long = pd.DataFrame(rows)
+    all_intervals = ["23:30", "23:45", "00:00", "00:15"]
+    species_list = ["NYCNOC", "PLEUAR", "VESMUR"]
+    type_order = ["SOC", "SOF", "FOD", "FORBI"]
+    color_dict = {"SOC": "#ff0000", "SOF": "#00ff00", "FOD": "#0000ff", "FORBI": "#ffff00"}
+
+    saved_xticks = []
+    saved_xticklabels = []
+    saved_bars = []
+
+    real_savefig = plt.savefig
+
+    def mock_savefig(out_path, *args, **kwargs):
+        ax = plt.gca()
+        saved_xticks.extend(ax.get_xticks().tolist())
+        saved_xticklabels.extend([label.get_text() for label in ax.get_xticklabels()])
+        for patch in ax.patches:
+            saved_bars.append((patch.get_x(), patch.get_width(), patch.get_height()))
+        real_savefig(out_path, *args, **kwargs)
+
+    monkeypatch.setattr(plt, "savefig", mock_savefig)
+
+    with tempfile.TemporaryDirectory() as tmp_dir:
+        out_png = os.path.join(tmp_dir, "test_fixed_slots.png")
+        core._plot_all_species_grouped_stacked(
+            df_long=df_long,
+            all_intervals=all_intervals,
+            species_list=species_list,
+            type_order=type_order,
+            color_dict=color_dict,
+            out_path=out_png,
+            title_text="Test Fixed Slots",
+            ymax_mode="zoomed",
+            y_lim_global=5,
+        )
+
+        assert os.path.exists(out_png)
+
+    # 1. Assert X tick labels match all_intervals including empty 00:00
+    assert saved_xticklabels == ["23:30", "23:45", "00:00", "00:15"]
+
+    # 2. Assert equal spacing between tick centers (fixed slot width)
+    diffs = [saved_xticks[i+1] - saved_xticks[i] for i in range(len(saved_xticks)-1)]
+    assert len(diffs) == 3
+    assert diffs[0] == pytest.approx(diffs[1]), "Interval 23:45 slot step differs from 23:30!"
+    assert diffs[1] == pytest.approx(diffs[2]), "Interval 00:00 slot step differs from 23:45!"
+
+    # 3. Verify bar positions for each slot center:
+    slot_0_center = saved_xticks[0]  # 23:30 (3 species)
+    slot_1_center = saved_xticks[1]  # 23:45 (2 species)
+    slot_2_center = saved_xticks[2]  # 00:00 (0 species)
+    slot_3_center = saved_xticks[3]  # 00:15 (1 species)
+
+    # Bars in slot 0 (3 species)
+    bars_slot_0 = [b for b in saved_bars if abs((b[0] + b[1]/2.0) - slot_0_center) < 0.45]
+    assert len(bars_slot_0) == 3, f"Expected 3 species bars in 23:30 slot, found {len(bars_slot_0)}"
+
+    # Bars in slot 1 (2 species)
+    bars_slot_1 = [b for b in saved_bars if abs((b[0] + b[1]/2.0) - slot_1_center) < 0.45]
+    assert len(bars_slot_1) == 2, f"Expected 2 species bars in 23:45 slot, found {len(bars_slot_1)}"
+
+    # Bars in slot 2 (0 species - empty slot)
+    bars_slot_2 = [b for b in saved_bars if abs((b[0] + b[1]/2.0) - slot_2_center) < 0.45]
+    assert len(bars_slot_2) == 0, f"Expected 0 species bars in 00:00 slot, found {len(bars_slot_2)}"
+
+    # Bars in slot 3 (1 species)
+    bars_slot_3 = [b for b in saved_bars if abs((b[0] + b[1]/2.0) - slot_3_center) < 0.45]
+    assert len(bars_slot_3) == 1, f"Expected 1 species bar in 00:15 slot, found {len(bars_slot_3)}"
+
+

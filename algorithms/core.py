@@ -676,45 +676,60 @@ def _plot_all_species_grouped_stacked(
 ):
     """Plot grouped stacked bar chart for all species across time intervals (#9).
     
-    Only species present inside each time bin are emitted as bars/labels.
+    Layout specifications:
+    - Every 15-minute interval in `all_intervals` occupies a fixed equal-width horizontal slot.
+    - Empty 15-minute intervals remain visible as empty slots on the timeline.
+    - Within each fixed slot, render only species actually present (no zero bars).
+    - Species bars are narrow and centered within the interval's fixed slot.
+    - Time labels are centered under each fixed slot position.
     """
-    grouped_items, peak_bar_h = build_all_species_grouped_data(df_long, all_intervals, type_order)
-    if not grouped_items:
+    if not all_intervals:
         return
+
+    grouped_items, peak_bar_h = build_all_species_grouped_data(df_long, all_intervals, type_order)
 
     if ymax_mode == "zoomed":
         chart_ymax = compute_ymax_with_headroom(peak_bar_h, headroom_factor=1.10)
     else:
         chart_ymax = y_lim_global
 
-    total_bars = len(grouped_items)
-    unique_intervals_in_items = list(dict.fromkeys(item["interval"] for item in grouped_items))
-    num_intervals = len(unique_intervals_in_items)
+    if chart_ymax <= 0:
+        chart_ymax = 1
 
-    fig_w = max(12, int(total_bars * 0.6 + num_intervals * 0.4))
+    num_intervals = len(all_intervals)
+    fig_w = max(12, int(num_intervals * 0.5))
     plt.figure(figsize=(fig_w, 7))
     ax = plt.gca()
 
-    bar_width = 0.7
-    interval_gap = 0.6
+    # Fixed slot step for every interval in all_intervals
+    slot_step = 1.0
+    bar_width = 0.18
 
     legend_handles = {}
-    x_tick_positions = []
-    x_tick_labels = []
 
-    current_x = 0.0
-
-    # Group items by interval to place time-bin tick label at center of present species bars
+    # Map grouped items by interval
     items_by_interval: dict[str, list[dict]] = {}
     for item in grouped_items:
         items_by_interval.setdefault(item["interval"], []).append(item)
 
-    for intv in unique_intervals_in_items:
-        intv_items = items_by_interval[intv]
-        intv_x_start = current_x
+    x_tick_positions = []
+    x_tick_labels = []
 
-        for item in intv_items:
-            x_pos = current_x
+    for idx, intv in enumerate(all_intervals):
+        slot_center = idx * slot_step
+        x_tick_positions.append(slot_center)
+        x_tick_labels.append(str(intv))
+
+        intv_items = items_by_interval.get(intv, [])
+        k = len(intv_items)
+        if k == 0:
+            continue
+
+        # Compute horizontal spacing between species bars inside this fixed slot
+        species_spacing = min(0.22, 0.80 / k)
+
+        for j, item in enumerate(intv_items):
+            x_pos = slot_center + (j - (k - 1) / 2.0) * species_spacing
             sp = item["species"]
             class_counts = item["class_counts"]
 
@@ -747,15 +762,6 @@ def _plot_all_species_grouped_stacked(
                 fontsize=8,
             )
 
-            current_x += bar_width + 0.1
-
-        intv_x_end = current_x - (bar_width + 0.1)
-        intv_center = (intv_x_start + intv_x_end) / 2.0
-        x_tick_positions.append(intv_center)
-        x_tick_labels.append(intv)
-
-        current_x += interval_gap
-
     ax.set_xticks(x_tick_positions)
     ax.set_xticklabels(x_tick_labels, rotation=270)
     ax.set_xlabel("Tid (15-minutersintervall)", labelpad=70)
@@ -769,8 +775,9 @@ def _plot_all_species_grouped_stacked(
 
     ax.yaxis.set_major_locator(MaxNLocator(integer=True))
     ax.set_ylim(0, chart_ymax)
-    ax.set_xlim(-0.8, current_x)
+    ax.set_xlim(-0.8, num_intervals * slot_step - 0.2)
     plt.grid(True, axis="y")
     plt.tight_layout()
     plt.savefig(out_path)
     plt.close()
+
