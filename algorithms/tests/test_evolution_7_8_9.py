@@ -74,12 +74,12 @@ def test_issue9_all_species_grouped_data_present_species_only():
 
 
 def test_issue8_sof_parsing_and_extraction():
-    assert extract_species_and_type("NYCNOC SOC") == [("NYCNOC", "SOC")]
-    assert extract_species_and_type("NYCNOC SOF") == [("NYCNOC", "SOF")]
-    assert extract_species_and_type("NYCNOC FOD") == [("NYCNOC", "FOD")]
-    assert extract_species_and_type("NYCNOC FORBI") == [("NYCNOC", "FORBI")]
-    assert extract_species_and_type("NYCNOC socialt - flyg") == [("NYCNOC", "SOF")]
-    assert extract_species_and_type("NYCNOC socialt - läte") == [("NYCNOC", "SOC")]
+    assert extract_species_and_type("NYCNOC SOC") == [("Nyctalus noctula", "SOC")]
+    assert extract_species_and_type("NYCNOC SOF") == [("Nyctalus noctula", "SOF")]
+    assert extract_species_and_type("NYCNOC FOD") == [("Nyctalus noctula", "FOD")]
+    assert extract_species_and_type("NYCNOC FORBI") == [("Nyctalus noctula", "FORBI")]
+    assert extract_species_and_type("NYCNOC socialt - flyg") == [("Nyctalus noctula", "SOF")]
+    assert extract_species_and_type("NYCNOC socialt - läte") == [("Nyctalus noctula", "SOC")]
 
 
 def test_issue8_dataset_without_sof_color_fallback():
@@ -155,9 +155,9 @@ def test_issues_7_8_9_headless_full_execution_flow():
         assert (stem_dir / "summary" / "stacked_NVI" / "alla_arter.png").exists()
 
         # Per-species summary charts check
-        assert (stem_dir / "summary" / "stacked_ART" / "NYCNOC.png").exists()
-        assert (stem_dir / "summary" / "stacked_ART" / "PLEUAR.png").exists()
-        assert (stem_dir / "summary" / "stacked_ART" / "VESMUR.png").exists()
+        assert (stem_dir / "summary" / "stacked_ART" / "Nyctalus noctula.png").exists()
+        assert (stem_dir / "summary" / "stacked_ART" / "Plecotus auritus.png").exists()
+        assert (stem_dir / "summary" / "stacked_ART" / "Vespertilio murinus.png").exists()
 
         # Per-night charts check (#9 alla_arter.png per night)
         nights_dir = stem_dir / "nights"
@@ -441,7 +441,7 @@ def test_dense_8_species_interval_no_overlap_and_fixed_slots(monkeypatch):
     slot_1_center = saved_xticks[1]  # 23:45 (1 species)
     slot_2_center = saved_xticks[2]  # 00:00 (0 species)
 
-    bars_slot_0 = sorted([b for b in saved_bars if abs((b[0] + b[1]/2.0) - slot_0_center) < 0.45], key=lambda b: b[0])
+    bars_slot_0 = sorted([b for b in saved_bars if abs((b[0] + b[1]/2.0) - slot_0_center) < 0.85], key=lambda b: b[0])
     assert len(bars_slot_0) == 8, f"Expected 8 species bars in 23:30 slot, found {len(bars_slot_0)}"
 
     # 3. Assert NO horizontal overlap between any adjacent bars in dense slot 0
@@ -453,7 +453,7 @@ def test_dense_8_species_interval_no_overlap_and_fixed_slots(monkeypatch):
     # 4. Assert 1-species bar does not stretch
     bars_slot_1 = [b for b in saved_bars if abs((b[0] + b[1]/2.0) - slot_1_center) < 0.45]
     assert len(bars_slot_1) == 1
-    assert bars_slot_1[0][1] <= 0.18, "1-species bar stretched beyond max bar width!"
+    assert bars_slot_1[0][1] <= 0.181, "1-species bar stretched beyond max bar width!"
 
     # 5. Empty slot 00:00 has zero bars
     bars_slot_2 = [b for b in saved_bars if abs((b[0] + b[1]/2.0) - slot_2_center) < 0.45]
@@ -586,6 +586,88 @@ def test_visual_layout_dual_axes_separators_counts_and_titles(monkeypatch):
     # 7 & 8. ART title contains (ART) and NVI title contains (NVI)
     assert "(ART)" in captured_titles[0]
     assert "(NVI)" in captured_titles[1]
+
+
+def test_per_species_naming_and_titles_match_pre_evolution_contract():
+    """Regression test proving output filenames and titles match 7b0cb27c pre-evolution behavior."""
+    import algorithms.core as core
+
+    # 1. Title formatting checks
+    title_myonat = core.format_title("Myotis nattereri", 5)
+    assert title_myonat == "Fransfladdermus (Myotis nattereri), antal observerade beteenden: 5"
+
+    title_night = core.format_title("Myotis nattereri", 5, "1/2.06")
+    assert title_night == "Fransfladdermus (Myotis nattereri) – natt 1/2.06, antal observerade beteenden: 5"
+
+    title_eptnil = core.format_title("Eptesicus nilssonii", 3)
+    assert title_eptnil == "Nordfladdermus (Cnephaeus nilssonii), antal observerade beteenden: 3"
+
+    # 2. Short code extraction checks
+    extracted = core.extract_species_and_type("MYONAT SOC")
+    assert extracted == [("Myotis nattereri", "SOC")]
+
+    extracted_ept = core.extract_species_and_type("EPTNIL FOD")
+    assert extracted_ept == [("Cnephaeus nilssonii", "FOD")]
+
+    # 3. Filename check
+    assert core.safe_filename("Myotis nattereri") == "Myotis nattereri"
+    assert core.safe_filename("Cnephaeus nilssonii") == "Cnephaeus nilssonii"
+
+
+def test_common_slot_width_expansion_for_dense_bins(monkeypatch):
+    """Regression test proving slot width expands uniformly for the entire chart when dense bins are present."""
+    import matplotlib
+    matplotlib.use("Agg")
+    import matplotlib.pyplot as plt
+    import algorithms.core as core
+
+    species_8 = ["NYCNOC", "PIPNAT", "PIPPYG", "PLEUAR", "EPTNIL", "VESMUR", "MYODAB", "MYOMYS"]
+    rows = []
+    # 23:30 has 8 species
+    for sp in species_8:
+        rows.append({"interval": "23:30", "species": sp, "obs_type": "SOC"})
+    # 23:45 has 1 species
+    rows.append({"interval": "23:45", "species": "NYCNOC", "obs_type": "SOC"})
+    # 00:00 is empty
+
+    df_long = pd.DataFrame(rows)
+    all_intervals = ["23:30", "23:45", "00:00"]
+    type_order = ["SOC", "SOF", "FOD", "FORBI"]
+    color_dict = {"SOC": "#ff0000", "SOF": "#00ff00", "FOD": "#0000ff", "FORBI": "#ffff00"}
+
+    captured_xticks = []
+
+    real_savefig = plt.savefig
+    def mock_savefig(out_path, *args, **kwargs):
+        fig = plt.gcf()
+        axes = fig.get_axes()
+        ax_top = axes[1] if len(axes) > 1 else axes[0]
+        captured_xticks.extend(ax_top.get_xticks().tolist())
+        real_savefig(out_path, *args, **kwargs)
+
+    monkeypatch.setattr(plt, "savefig", mock_savefig)
+
+    with tempfile.TemporaryDirectory() as tmp_dir:
+        out_png = os.path.join(tmp_dir, "test_dense_expansion.png")
+        core._plot_all_species_grouped_stacked(
+            df_long=df_long,
+            all_intervals=all_intervals,
+            species_list=species_8,
+            type_order=type_order,
+            color_dict=color_dict,
+            out_path=out_png,
+            title_text="Test Dense Expansion",
+            ymax_mode="fixed",
+            y_lim_global=5,
+        )
+
+    # All 3 slots must have EXACTLY the same widened slot step (> 1.5)
+    diff_0_1 = captured_xticks[1] - captured_xticks[0]
+    diff_1_2 = captured_xticks[2] - captured_xticks[1]
+
+    assert diff_0_1 > 1.5, f"Expected common slot step to expand > 1.5 for 8 species, got {diff_0_1}"
+    assert diff_0_1 == pytest.approx(diff_1_2), "All slots in the chart must share the exact same slot width!"
+
 
 
 

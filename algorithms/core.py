@@ -210,6 +210,7 @@ def extract_species_and_type(manual_id_value):
             "",
             species,
         ).strip(" ,;")
+        species = CODE_TO_LATIN.get(species.upper(), species)
         if species == "Eptesicus nilssonii":
             species = "Cnephaeus nilssonii"
         elif species == "Eptesicus serotinus":
@@ -732,16 +733,25 @@ def _plot_all_species_grouped_stacked(
         chart_ymax = 1
 
     num_intervals = len(all_intervals)
-    fig_w = max(12, int(num_intervals * 0.5))
-    fig, ax = plt.subplots(figsize=(fig_w, 7))
-    ax_top = ax.twiny()
-
-    slot_step = 1.0
-    legend_handles = {}
-
     items_by_interval: dict[str, list[dict]] = {}
     for item in grouped_items:
         items_by_interval.setdefault(item["interval"], []).append(item)
+
+    max_k = max([len(items) for items in items_by_interval.values()], default=1)
+    if max_k <= 2:
+        slot_step = 1.0
+    elif max_k == 3:
+        slot_step = 1.2
+    elif max_k == 4:
+        slot_step = 1.4
+    else:
+        slot_step = 1.0 + max_k * 0.12
+
+    fig_w = max(12, int(num_intervals * slot_step * 0.55))
+    fig, ax = plt.subplots(figsize=(fig_w, 7))
+    ax_top = ax.twiny()
+
+    legend_handles = {}
 
     top_tick_positions = []
     top_tick_labels = []
@@ -765,7 +775,8 @@ def _plot_all_species_grouped_stacked(
             continue
 
         # Compute horizontal spacing and adaptive bar width inside this fixed slot (#9)
-        species_spacing = min(0.22, 0.80 / k)
+        available_width = slot_step * 0.80
+        species_spacing = min(0.25, available_width / k)
         current_bar_width = min(0.18, species_spacing * 0.80)
 
         for j, item in enumerate(intv_items):
@@ -807,8 +818,8 @@ def _plot_all_species_grouped_stacked(
             species_tick_labels.append(sp_label)
 
     # Set up axes geometry and limits
-    x_min = -0.5
-    x_max = num_intervals * slot_step - 0.5
+    x_min = -slot_step / 2.0
+    x_max = num_intervals * slot_step - slot_step / 2.0
     ax.set_xlim(x_min, x_max)
     ax_top.set_xlim(x_min, x_max)
 
