@@ -368,3 +368,88 @@ def test_equal_width_slots_and_spacing_for_all_intervals(monkeypatch):
     assert len(bars_slot_3) == 1, f"Expected 1 species bar in 00:15 slot, found {len(bars_slot_3)}"
 
 
+def test_dense_8_species_interval_no_overlap_and_fixed_slots(monkeypatch):
+    """Regression test proving a dense 8-species interval fits in its fixed slot with zero bar overlap."""
+    import matplotlib
+    matplotlib.use("Agg")
+    import matplotlib.pyplot as plt
+    import algorithms.core as core
+
+    species_8 = ["NYCNOC", "PIPNAT", "PIPPYG", "PLEUAR", "EPTNIL", "VESMUR", "MYODAB", "MYOMYS"]
+    rows = []
+    # 23:30 with 8 species
+    for sp in species_8:
+        rows.append({"interval": "23:30", "species": sp, "obs_type": "SOC"})
+
+    # 23:45 with 1 species
+    rows.append({"interval": "23:45", "species": "NYCNOC", "obs_type": "SOC"})
+    # 00:00 with 0 species (empty)
+
+    df_long = pd.DataFrame(rows)
+    all_intervals = ["23:30", "23:45", "00:00"]
+    type_order = ["SOC", "SOF", "FOD", "FORBI"]
+    color_dict = {"SOC": "#ff0000", "SOF": "#00ff00", "FOD": "#0000ff", "FORBI": "#ffff00"}
+
+    saved_xticks = []
+    saved_xticklabels = []
+    saved_bars = []
+
+    real_savefig = plt.savefig
+
+    def mock_savefig(out_path, *args, **kwargs):
+        ax = plt.gca()
+        saved_xticks.extend(ax.get_xticks().tolist())
+        saved_xticklabels.extend([label.get_text() for label in ax.get_xticklabels()])
+        for patch in ax.patches:
+            saved_bars.append((patch.get_x(), patch.get_width(), patch.get_height()))
+        real_savefig(out_path, *args, **kwargs)
+
+    monkeypatch.setattr(plt, "savefig", mock_savefig)
+
+    with tempfile.TemporaryDirectory() as tmp_dir:
+        out_png = os.path.join(tmp_dir, "test_dense_8.png")
+        core._plot_all_species_grouped_stacked(
+            df_long=df_long,
+            all_intervals=all_intervals,
+            species_list=species_8,
+            type_order=type_order,
+            color_dict=color_dict,
+            out_path=out_png,
+            title_text="Test Dense 8",
+            ymax_mode="zoomed",
+            y_lim_global=5,
+        )
+
+        assert os.path.exists(out_png)
+
+    # 1. Timeline tick labels present & centered
+    assert saved_xticklabels == ["23:30", "23:45", "00:00"]
+
+    # 2. Equal slot center spacing
+    diffs = [saved_xticks[i+1] - saved_xticks[i] for i in range(len(saved_xticks)-1)]
+    assert diffs[0] == pytest.approx(diffs[1]), "Slot center step is not equal!"
+
+    slot_0_center = saved_xticks[0]  # 23:30 (8 species)
+    slot_1_center = saved_xticks[1]  # 23:45 (1 species)
+    slot_2_center = saved_xticks[2]  # 00:00 (0 species)
+
+    bars_slot_0 = sorted([b for b in saved_bars if abs((b[0] + b[1]/2.0) - slot_0_center) < 0.45], key=lambda b: b[0])
+    assert len(bars_slot_0) == 8, f"Expected 8 species bars in 23:30 slot, found {len(bars_slot_0)}"
+
+    # 3. Assert NO horizontal overlap between any adjacent bars in dense slot 0
+    for i in range(len(bars_slot_0) - 1):
+        left_bar_right = bars_slot_0[i][0] + bars_slot_0[i][1]
+        right_bar_left = bars_slot_0[i+1][0]
+        assert left_bar_right < right_bar_left, f"Overlap detected between bar {i} and bar {i+1}!"
+
+    # 4. Assert 1-species bar does not stretch
+    bars_slot_1 = [b for b in saved_bars if abs((b[0] + b[1]/2.0) - slot_1_center) < 0.45]
+    assert len(bars_slot_1) == 1
+    assert bars_slot_1[0][1] <= 0.18, "1-species bar stretched beyond max bar width!"
+
+    # 5. Empty slot 00:00 has zero bars
+    bars_slot_2 = [b for b in saved_bars if abs((b[0] + b[1]/2.0) - slot_2_center) < 0.45]
+    assert len(bars_slot_2) == 0
+
+
+

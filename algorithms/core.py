@@ -725,8 +725,10 @@ def _plot_all_species_grouped_stacked(
         if k == 0:
             continue
 
-        # Compute horizontal spacing between species bars inside this fixed slot
+        # Compute horizontal spacing and adaptive bar width inside this fixed slot (#9)
         species_spacing = min(0.22, 0.80 / k)
+        current_bar_width = min(0.18, species_spacing * 0.80)
+        sp_fontsize = 8 if k <= 4 else (6 if k <= 7 else 5)
 
         for j, item in enumerate(intv_items):
             x_pos = slot_center + (j - (k - 1) / 2.0) * species_spacing
@@ -742,7 +744,7 @@ def _plot_all_species_grouped_stacked(
                         x_pos,
                         val,
                         bottom=bottom,
-                        width=bar_width,
+                        width=current_bar_width,
                         color=color,
                         edgecolor="none",
                     )
@@ -759,7 +761,7 @@ def _plot_all_species_grouped_stacked(
                 rotation=90,
                 ha="center",
                 va="top",
-                fontsize=8,
+                fontsize=sp_fontsize,
             )
 
     ax.set_xticks(x_tick_positions)
