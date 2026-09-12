@@ -127,23 +127,126 @@ def format_title(species_latin: str, total_count: int) -> str:
     return f"{display_latin}, antal observerade beteenden: {int(total_count)}"
 
 def extract_species_and_type(manual_id_value):
-    """Tolkar fältet MANUAL ID till lista av (art, beteendetyp: Förbiflygande/Socialt/Födosökande)."""
+    """Tolkar fältet MANUAL ID till lista av (art, beteendetyp-kod: FOD/SOC/SOF/FORBI)."""
     if pd.isna(manual_id_value): return []
     out = []
     for raw in str(manual_id_value).split(","):
         entry = raw.strip()
         if not entry: continue
         upper = entry.upper()
-        if "FOD" in upper: typ = "Födosökande"
-        elif "SOC" in upper: typ = "Socialt"
-        else: typ = "Förbiflygande"
-        species = re.sub(r'\b(FOD|SOC)\b', "", entry, flags=re.IGNORECASE).strip(" ,;")
+        if "SOF" in upper or "SOCIALT - FLYG" in upper:
+            typ = "SOF"
+        elif "SOC" in upper or "SOCIALT" in upper:
+            typ = "SOC"
+        elif "FOD" in upper or "FÖDOSÖKANDE" in upper or "FODOSOKANDE" in upper:
+            typ = "FOD"
+        else:
+            typ = "FORBI"
+
+        species = re.sub(r'\b(FOD|SOC|SOF|FORBI)\b', "", entry, flags=re.IGNORECASE)
+        species = re.sub(r'(?i)socialt\s*-\s*flyg|socialt\s*-\s*läte|socialt|födosökande|fodosokande|förbiflygande', "", species).strip(" ,;")
         if species == "Eptesicus nilssonii":
             species = "Cnephaeus nilssonii"
         elif species == "Eptesicus serotinus":
             species = "Cnephaeus serotinus"
         out.append((species, typ))
     return out
+
+def resolve_dataset_class_config(input_files_or_dfs, custom_colors=None):
+    """Determine if dataset has SOF and build class names, type order, and color palettes."""
+    has_sof = False
+    for item in input_files_or_dfs:
+        if isinstance(item, (str, os.PathLike)):
+            try:
+                df = read_input_table(item)
+            except Exception:
+                continue
+        else:
+            df = item
+
+        if "MANUAL ID" in df.columns:
+            for val in df["MANUAL ID"].dropna():
+                for _, typ in extract_species_and_type(val):
+                    if typ == "SOF":
+                        has_sof = True
+                        break
+                if has_sof:
+                    break
+        if has_sof:
+            break
+
+    custom_colors = custom_colors or {}
+    nvi_custom = custom_colors.get("NVI") or {}
+    art_custom = custom_colors.get("ART") or {}
+
+    HEX_NVI_SOC_DEFAULT_NO_SOF = "#FF0000"
+    HEX_ART_SOC_DEFAULT_NO_SOF = "#EB09D8"
+    HEX_NVI_SOC_DEFAULT_WITH_SOF = "#9A0B08"
+    HEX_NVI_SOF_DEFAULT          = "#FF0000"
+    HEX_ART_SOC_DEFAULT_WITH_SOF = "#8D0B82"
+    HEX_ART_SOF_DEFAULT          = "#EB09D8"
+    HEX_NVI_FODO_DEF  = "#FFC000"
+    HEX_NVI_FORBI_DEF = "#A9A9A9"
+    HEX_ART_FODO_DEF  = "#D98FD3"
+    HEX_ART_FORBI_DEF = "#ABAAA9"
+
+    if has_sof:
+        type_order = ["Socialt - läte", "Socialt - flyg", "Födosökande", "Förbiflygande"]
+        code_map = {
+            "SOC": "Socialt - läte",
+            "SOF": "Socialt - flyg",
+            "FOD": "Födosökande",
+            "FORBI": "Förbiflygande"
+        }
+        nvi_soc_color = nvi_custom.get("Socialt - läte") or nvi_custom.get("SOC") or nvi_custom.get("Socialt") or HEX_NVI_SOC_DEFAULT_WITH_SOF
+        nvi_sof_color = nvi_custom.get("Socialt - flyg") or nvi_custom.get("SOF") or HEX_NVI_SOF_DEFAULT
+        nvi_fodo_color = nvi_custom.get("Födosökande") or nvi_custom.get("FOD") or HEX_NVI_FODO_DEF
+        nvi_forbi_color = nvi_custom.get("Förbiflygande") or nvi_custom.get("FORBI") or HEX_NVI_FORBI_DEF
+
+        art_soc_color = art_custom.get("Socialt - läte") or art_custom.get("SOC") or art_custom.get("Socialt") or HEX_ART_SOC_DEFAULT_WITH_SOF
+        art_sof_color = art_custom.get("Socialt - flyg") or art_custom.get("SOF") or HEX_ART_SOF_DEFAULT
+        art_fodo_color = art_custom.get("Födosökande") or art_custom.get("FOD") or HEX_ART_FODO_DEF
+        art_forbi_color = art_custom.get("Förbiflygande") or art_custom.get("FORBI") or HEX_ART_FORBI_DEF
+
+        nvi_colors = [nvi_soc_color, nvi_sof_color, nvi_fodo_color, nvi_forbi_color]
+        art_colors = [art_soc_color, art_sof_color, art_fodo_color, art_forbi_color]
+    else:
+        type_order = ["Socialt", "Födosökande", "Förbiflygande"]
+        code_map = {
+            "SOC": "Socialt",
+            "SOF": "Socialt - flyg",
+            "FOD": "Födosökande",
+            "FORBI": "Förbiflygande"
+        }
+        nvi_soc_color = nvi_custom.get("Socialt") or nvi_custom.get("Socialt - läte") or nvi_custom.get("SOC") or HEX_NVI_SOC_DEFAULT_NO_SOF
+        nvi_fodo_color = nvi_custom.get("Födosökande") or nvi_custom.get("FOD") or HEX_NVI_FODO_DEF
+        nvi_forbi_color = nvi_custom.get("Förbiflygande") or nvi_custom.get("FORBI") or HEX_NVI_FORBI_DEF
+
+        art_soc_color = art_custom.get("Socialt") or art_custom.get("Socialt - läte") or art_custom.get("SOC") or HEX_ART_SOC_DEFAULT_NO_SOF
+        art_fodo_color = art_custom.get("Födosökande") or art_custom.get("FOD") or HEX_ART_FODO_DEF
+        art_forbi_color = art_custom.get("Förbiflygande") or art_custom.get("FORBI") or HEX_ART_FORBI_DEF
+
+        nvi_colors = [nvi_soc_color, nvi_fodo_color, nvi_forbi_color]
+        art_colors = [art_soc_color, art_fodo_color, art_forbi_color]
+
+    nvi_color_dict = dict(zip(type_order, nvi_colors))
+    art_color_dict = dict(zip(type_order, art_colors))
+
+    return {
+        "has_sof": has_sof,
+        "type_order": type_order,
+        "code_map": code_map,
+        "colors_art": art_colors,
+        "colors_nvi": nvi_colors,
+        "art_color_dict": art_color_dict,
+        "nvi_color_dict": nvi_color_dict,
+    }
+
+def compute_ymax_with_headroom(max_val: float | int) -> int:
+    """Derive Y max from actual plotted data + 10% headroom, with deterministic min of 1."""
+    if max_val <= 0:
+        return 1
+    return max(1, math.ceil(max_val * 1.10))
 
 def open_file(path):
     """Försöker öppna fil i OS:et för snabb visuell kontroll."""
