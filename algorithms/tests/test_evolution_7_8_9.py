@@ -561,9 +561,9 @@ def test_visual_layout_dual_axes_separators_counts_and_titles(monkeypatch):
     assert captured_top_labels[:3] == ["23:30", "23:45", "00:00"]
 
     # 2. Bottom axis contains ONLY labels for present species (NYCNOC, PLEUAR at 23:30, VESMUR at 00:00)
-    # NYCNOC maps to 'Stor fladdermus', PLEUAR to 'Långörad fladdermus', VESMUR to 'Gråskimlig fladdermus'
+    # NYCNOC maps to 'Större brunfladdermus', PLEUAR to 'Brunlångöra', VESMUR to 'Gråskimlig fladdermus'
     assert len(captured_bottom_labels[:3]) == 3
-    assert captured_bottom_labels[:3] == ["Stor fladdermus", "Långörad fladdermus", "Gråskimlig fladdermus"]
+    assert captured_bottom_labels[:3] == ["Större brunfladdermus", "Brunlångöra", "Gråskimlig fladdermus"]
 
     # 3. Species labels positioned at species bar centers
     # 23:30 has 2 species (NYCNOC, PLEUAR), center=0.0 -> bar positions at -0.11 and +0.11
