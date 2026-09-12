@@ -456,7 +456,7 @@ def run_analysis(settings: dict):
         results_dir = os.path.join(base_dir, "results")
 
     combined_dir = os.path.join(results_dir, "combined")
-    inputs_dir = settings["diagram_base"] if settings.get("diagram_base") else os.path.join(results_dir, "inputs")
+    inputs_dir = settings["diagram_base"] if settings.get("diagram_base") else results_dir
     os.makedirs(combined_dir, exist_ok=True)
     os.makedirs(inputs_dir, exist_ok=True)
 

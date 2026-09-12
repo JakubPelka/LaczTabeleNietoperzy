@@ -48,4 +48,4 @@ class HeadlessMergeTests(TestCase):
             self.assertTrue(results_dir.exists())
             self.assertTrue((results_dir / "test_output_NVI.xlsx").exists())
             self.assertTrue((results_dir / "test_output_ART.xlsx").exists())
-            self.assertTrue((out_dir / "results" / "inputs").exists())
+            self.assertTrue((out_dir / "results" / "site_a").exists())

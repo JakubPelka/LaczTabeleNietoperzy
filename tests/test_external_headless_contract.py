@@ -96,7 +96,7 @@ class ExternalHeadlessContractTests(TestCase):
             })
 
             combined_dir = temp_path / "results" / "combined"
-            inputs_dir = temp_path / "results" / "inputs"
+            inputs_dir = temp_path / "results"
 
             # Combined NVI/ART files exist
             self.assertTrue((combined_dir / "test_run_NVI.xlsx").is_file())
@@ -107,8 +107,8 @@ class ExternalHeadlessContractTests(TestCase):
             self.assertFalse((combined_dir / "parallel_bat_activity_data.csv").exists())
             self.assertFalse((combined_dir / "parallel_bat_activity_report.txt").exists())
 
-            # Two input sources produce two deterministic parent folders
-            parent_folders = sorted([p.name for p in inputs_dir.iterdir() if p.is_dir()])
+            # Two input sources produce two deterministic parent folders directly under results/
+            parent_folders = sorted([p.name for p in inputs_dir.iterdir() if p.is_dir() and p.name != "combined"])
             self.assertEqual(parent_folders, ["bat_data", "bat_data_2"])
 
             # Per-input folder structure
@@ -190,7 +190,7 @@ class ExternalHeadlessContractTests(TestCase):
                 "open_files": False,
             })
 
-            line_dir = temp_path / "results" / "inputs" / "bat_data" / "summary" / "line"
+            line_dir = temp_path / "results" / "bat_data" / "summary" / "line"
             self.assertTrue((line_dir / "Nyctalus noctula.png").exists())
             # Eptesicus nilssonii was at 14:00 (out of window), must NOT be generated
             self.assertFalse((line_dir / "Cnephaeus nilssonii.png").exists())
@@ -275,7 +275,7 @@ class ExternalHeadlessContractTests(TestCase):
                 "open_files": False,
             })
 
-            line_dir = temp_path / "results" / "inputs" / "bat_data" / "summary" / "line"
+            line_dir = temp_path / "results" / "bat_data" / "summary" / "line"
             self.assertTrue((line_dir / "Nyctalus noctula.png").is_file())
             self.assertTrue((line_dir / "alla_arter.png").is_file())
 
