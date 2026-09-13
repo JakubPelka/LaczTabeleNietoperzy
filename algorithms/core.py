@@ -817,7 +817,8 @@ def _plot_all_species_grouped_stacked(
                         bottom=bottom,
                         width=base_bar_width,
                         color=color,
-                        edgecolor="none",
+                        edgecolor="black",
+                        linewidth=0.3,
                     )
                     if ot not in legend_handles:
                         legend_handles[ot] = bar_container[0]
@@ -831,7 +832,7 @@ def _plot_all_species_grouped_stacked(
                     str(total_count),
                     ha="center",
                     va="bottom",
-                    fontsize=7,
+                    fontsize=7.5,
                     fontweight="bold",
                 )
 
@@ -853,7 +854,12 @@ def _plot_all_species_grouped_stacked(
 
     # Bottom axis (species)
     ax.set_xticks(species_tick_positions)
-    ax.set_xticklabels(species_tick_labels, rotation=90)
+    ax.set_xticklabels(
+        species_tick_labels,
+        rotation=90,
+        fontsize=7.5,
+        ha="center",
+    )
     ax.set_ylabel("Antal ljudfiler")
 
     if legend_handles:
