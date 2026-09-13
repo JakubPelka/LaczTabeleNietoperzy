@@ -871,7 +871,7 @@ def _plot_all_species_grouped_stacked(
     ax.set_ylim(0, chart_ymax)
     ax.grid(True, axis="y")
     plt.tight_layout()
-    plt.savefig(out_path)
+    plt.savefig(out_path, dpi=200)
     plt.close()
 
 
