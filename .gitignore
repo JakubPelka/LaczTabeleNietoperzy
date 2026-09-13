@@ -9,3 +9,7 @@ __pycache__/
 *.py[cod]
 Results/
 diagramer/
+/test_output_*/
+/test_reference_geometry.png
+/test_layout_preview.png
+
