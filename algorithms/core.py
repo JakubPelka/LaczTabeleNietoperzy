@@ -719,6 +719,50 @@ def _plot_all_species_grouped_stacked(
     - Stacked bar count annotation centered above each non-zero species stack.
     - Equal-width 15-minute slot geometry and adaptive non-overlapping bar widths preserved.
     """
+def compute_all_species_geometry(max_k: int, num_intervals: int, scale: float = 1.0) -> dict[str, float | int]:
+    """Compute unified all-species chart geometry derived from one shared base bar width (#9).
+
+    Reference Geometry Principle:
+      base_bar_width = 0.16 * scale
+      species_spacing = base_bar_width
+      slot_width = (max_k + 0.8) * base_bar_width
+      fig_w = max(12.0, num_intervals * slot_width * 2.5)
+    """
+    k_eff = max(1, int(max_k))
+    base_bar_width = 0.16 * scale
+    species_spacing = base_bar_width
+    slot_width = (k_eff + 0.8) * base_bar_width
+    fig_w = max(12.0, float(num_intervals * slot_width * 2.5))
+    return {
+        "max_k": k_eff,
+        "base_bar_width": base_bar_width,
+        "species_spacing": species_spacing,
+        "slot_width": slot_width,
+        "fig_w": fig_w,
+    }
+
+
+def _plot_all_species_grouped_stacked(
+    df_long: pd.DataFrame,
+    all_intervals: list[str],
+    species_list: list[str],
+    type_order: list[str],
+    color_dict: dict[str, str],
+    out_path: str,
+    title_text: str,
+    ymax_mode: str,
+    y_lim_global: int,
+):
+    """Plot grouped stacked bar chart for all species across time intervals (#9).
+    
+    Layout specifications:
+    - Dual horizontal axes:
+        * Top axis (`ax_top`): 15-minute time labels centered over equal-width slots.
+        * Bottom axis (`ax`): Vertical species labels directly under rendered species bars.
+    - Subtle vertical dotted separators between adjacent 15-minute time slots.
+    - Stacked bar count annotation centered above each non-zero species stack.
+    - Equal-width 15-minute slot geometry derived from single shared reference geometry.
+    """
     if not all_intervals:
         return
 
@@ -738,16 +782,13 @@ def _plot_all_species_grouped_stacked(
         items_by_interval.setdefault(item["interval"], []).append(item)
 
     max_k = max([len(items) for items in items_by_interval.values()], default=1)
-    if max_k <= 2:
-        slot_step = 1.0
-    elif max_k == 3:
-        slot_step = 1.2
-    elif max_k == 4:
-        slot_step = 1.4
-    else:
-        slot_step = 1.0 + max_k * 0.12
+    geom = compute_all_species_geometry(max_k, num_intervals)
 
-    fig_w = max(12, int(num_intervals * slot_step * 0.55))
+    slot_width = float(geom["slot_width"])
+    base_bar_width = float(geom["base_bar_width"])
+    species_spacing = float(geom["species_spacing"])
+    fig_w = float(geom["fig_w"])
+
     fig, ax = plt.subplots(figsize=(fig_w, 7))
     ax_top = ax.twiny()
 
@@ -760,24 +801,19 @@ def _plot_all_species_grouped_stacked(
     species_tick_labels = []
 
     for idx, intv in enumerate(all_intervals):
-        slot_center = idx * slot_step
+        slot_center = idx * slot_width
         top_tick_positions.append(slot_center)
         top_tick_labels.append(str(intv))
 
         # Subtle vertical dotted separator between adjacent time slots
         if idx < num_intervals - 1:
-            x_sep = slot_center + slot_step / 2.0
+            x_sep = slot_center + slot_width / 2.0
             ax.axvline(x=x_sep, color="#cccccc", linestyle=":", linewidth=0.8, zorder=0)
 
         intv_items = items_by_interval.get(intv, [])
         k = len(intv_items)
         if k == 0:
             continue
-
-        # Compute horizontal spacing and adaptive bar width inside this fixed slot (#9)
-        available_width = slot_step * 0.80
-        species_spacing = min(0.25, available_width / k)
-        current_bar_width = min(0.18, species_spacing * 0.80)
 
         for j, item in enumerate(intv_items):
             x_pos = slot_center + (j - (k - 1) / 2.0) * species_spacing
@@ -793,7 +829,7 @@ def _plot_all_species_grouped_stacked(
                         x_pos,
                         val,
                         bottom=bottom,
-                        width=current_bar_width,
+                        width=base_bar_width,
                         color=color,
                         edgecolor="none",
                     )
@@ -818,8 +854,8 @@ def _plot_all_species_grouped_stacked(
             species_tick_labels.append(sp_label)
 
     # Set up axes geometry and limits
-    x_min = -slot_step / 2.0
-    x_max = num_intervals * slot_step - slot_step / 2.0
+    x_min = -slot_width / 2.0
+    x_max = num_intervals * slot_width - slot_width / 2.0
     ax.set_xlim(x_min, x_max)
     ax_top.set_xlim(x_min, x_max)
 

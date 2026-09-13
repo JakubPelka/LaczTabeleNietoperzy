@@ -356,19 +356,19 @@ def test_equal_width_slots_and_spacing_for_all_intervals(monkeypatch):
     slot_3_center = saved_xticks[3]  # 00:15 (1 species)
 
     # Bars in slot 0 (3 species)
-    bars_slot_0 = [b for b in saved_bars if abs((b[0] + b[1]/2.0) - slot_0_center) < 0.45]
+    bars_slot_0 = [b for b in saved_bars if abs((b[0] + b[1]/2.0) - slot_0_center) < 0.30]
     assert len(bars_slot_0) == 3, f"Expected 3 species bars in 23:30 slot, found {len(bars_slot_0)}"
 
     # Bars in slot 1 (2 species)
-    bars_slot_1 = [b for b in saved_bars if abs((b[0] + b[1]/2.0) - slot_1_center) < 0.45]
+    bars_slot_1 = [b for b in saved_bars if abs((b[0] + b[1]/2.0) - slot_1_center) < 0.30]
     assert len(bars_slot_1) == 2, f"Expected 2 species bars in 23:45 slot, found {len(bars_slot_1)}"
 
     # Bars in slot 2 (0 species - empty slot)
-    bars_slot_2 = [b for b in saved_bars if abs((b[0] + b[1]/2.0) - slot_2_center) < 0.45]
+    bars_slot_2 = [b for b in saved_bars if abs((b[0] + b[1]/2.0) - slot_2_center) < 0.30]
     assert len(bars_slot_2) == 0, f"Expected 0 species bars in 00:00 slot, found {len(bars_slot_2)}"
 
     # Bars in slot 3 (1 species)
-    bars_slot_3 = [b for b in saved_bars if abs((b[0] + b[1]/2.0) - slot_3_center) < 0.45]
+    bars_slot_3 = [b for b in saved_bars if abs((b[0] + b[1]/2.0) - slot_3_center) < 0.30]
     assert len(bars_slot_3) == 1, f"Expected 1 species bar in 00:15 slot, found {len(bars_slot_3)}"
 
 
@@ -441,22 +441,22 @@ def test_dense_8_species_interval_no_overlap_and_fixed_slots(monkeypatch):
     slot_1_center = saved_xticks[1]  # 23:45 (1 species)
     slot_2_center = saved_xticks[2]  # 00:00 (0 species)
 
-    bars_slot_0 = sorted([b for b in saved_bars if abs((b[0] + b[1]/2.0) - slot_0_center) < 0.85], key=lambda b: b[0])
+    bars_slot_0 = sorted([b for b in saved_bars if abs((b[0] + b[1]/2.0) - slot_0_center) < 0.65], key=lambda b: b[0])
     assert len(bars_slot_0) == 8, f"Expected 8 species bars in 23:30 slot, found {len(bars_slot_0)}"
 
     # 3. Assert NO horizontal overlap between any adjacent bars in dense slot 0
     for i in range(len(bars_slot_0) - 1):
         left_bar_right = bars_slot_0[i][0] + bars_slot_0[i][1]
         right_bar_left = bars_slot_0[i+1][0]
-        assert left_bar_right < right_bar_left, f"Overlap detected between bar {i} and bar {i+1}!"
+        assert left_bar_right <= right_bar_left + 1e-9, f"Overlap detected between bar {i} and bar {i+1}!"
 
     # 4. Assert 1-species bar does not stretch
-    bars_slot_1 = [b for b in saved_bars if abs((b[0] + b[1]/2.0) - slot_1_center) < 0.45]
+    bars_slot_1 = [b for b in saved_bars if abs((b[0] + b[1]/2.0) - slot_1_center) < 0.30]
     assert len(bars_slot_1) == 1
     assert bars_slot_1[0][1] <= 0.181, "1-species bar stretched beyond max bar width!"
 
     # 5. Empty slot 00:00 has zero bars
-    bars_slot_2 = [b for b in saved_bars if abs((b[0] + b[1]/2.0) - slot_2_center) < 0.45]
+    bars_slot_2 = [b for b in saved_bars if abs((b[0] + b[1]/2.0) - slot_2_center) < 0.30]
     assert len(bars_slot_2) == 0
 
 
@@ -561,25 +561,22 @@ def test_visual_layout_dual_axes_separators_counts_and_titles(monkeypatch):
     assert captured_top_labels[:3] == ["23:30", "23:45", "00:00"]
 
     # 2. Bottom axis contains ONLY labels for present species (NYCNOC, PLEUAR at 23:30, VESMUR at 00:00)
-    # NYCNOC maps to 'Större brunfladdermus', PLEUAR to 'Brunlångöra', VESMUR to 'Gråskimlig fladdermus'
     assert len(captured_bottom_labels[:3]) == 3
     assert captured_bottom_labels[:3] == ["Större brunfladdermus", "Brunlångöra", "Gråskimlig fladdermus"]
 
     # 3. Species labels positioned at species bar centers
-    # 23:30 has 2 species (NYCNOC, PLEUAR), center=0.0 -> bar positions at -0.11 and +0.11
-    assert captured_bottom_xticks[0] == pytest.approx(-0.11, abs=0.02)
-    assert captured_bottom_xticks[1] == pytest.approx(0.11, abs=0.02)
+    # 23:30 has 2 species (NYCNOC, PLEUAR), center=0.0 -> bar positions at -0.08 and +0.08
+    assert captured_bottom_xticks[0] == pytest.approx(-0.08, abs=0.01)
+    assert captured_bottom_xticks[1] == pytest.approx(0.08, abs=0.01)
 
-    # 4. Time labels positioned at fixed slot centers (0.0, 1.0, 2.0)
-    assert captured_top_xticks[:3] == [0.0, 1.0, 2.0]
+    # 4. Time labels positioned at fixed slot centers
+    slot_w_exp = (2 + 0.8) * 0.16  # max_k=2 species -> slot_w=0.448
+    assert captured_top_xticks[:3] == [pytest.approx(0.0), pytest.approx(slot_w_exp), pytest.approx(2 * slot_w_exp)]
 
-    # 5. Separator line positions sit halfway between adjacent slots (0.5 and 1.5)
-    assert captured_vlines[:2] == [0.5, 1.5]
+    # 5. Separator line positions sit halfway between adjacent slots
+    assert captured_vlines[:2] == [pytest.approx(slot_w_exp / 2.0), pytest.approx(1.5 * slot_w_exp)]
 
     # 6. Total count annotations equal sum of behavior classes
-    # NYCNOC at 23:30 has SOC=1, SOF=1 -> total=2
-    # PLEUAR at 23:30 has FOD=1 -> total=1
-    # VESMUR at 00:00 has FORBI=1 -> total=1
     count_texts = [txt for pos, txt in captured_texts[:3]]
     assert count_texts == ["2", "1", "1"]
 
@@ -661,12 +658,108 @@ def test_common_slot_width_expansion_for_dense_bins(monkeypatch):
             y_lim_global=5,
         )
 
-    # All 3 slots must have EXACTLY the same widened slot step (> 1.5)
+    # All 3 slots must have EXACTLY the same widened slot step (> 1.3)
     diff_0_1 = captured_xticks[1] - captured_xticks[0]
     diff_1_2 = captured_xticks[2] - captured_xticks[1]
 
-    assert diff_0_1 > 1.5, f"Expected common slot step to expand > 1.5 for 8 species, got {diff_0_1}"
+    assert diff_0_1 > 1.3, f"Expected common slot step to expand > 1.3 for 8 species, got {diff_0_1}"
     assert diff_0_1 == pytest.approx(diff_1_2), "All slots in the chart must share the exact same slot width!"
+
+
+def test_reference_geometry_derivation_and_equal_slots(monkeypatch):
+    """Directly test that shared reference geometry determines bar_width, species_spacing, slot_width, and fig_w,
+    and proves equal slot spacing across 1-species, 4-species, 8-species, and empty intervals."""
+    import algorithms.core as core
+    import matplotlib
+    matplotlib.use("Agg")
+    import matplotlib.pyplot as plt
+
+    # 1. Verify shared geometry helper
+    g1 = core.compute_all_species_geometry(max_k=1, num_intervals=10)
+    assert g1["base_bar_width"] == 0.16
+    assert g1["species_spacing"] == 0.16
+    assert g1["slot_width"] == pytest.approx(1.8 * 0.16)
+
+    g8 = core.compute_all_species_geometry(max_k=8, num_intervals=10)
+    assert g8["base_bar_width"] == 0.16
+    assert g8["species_spacing"] == 0.16
+    assert g8["slot_width"] == pytest.approx(8.8 * 0.16)
+    assert g8["fig_w"] > 12.0
+
+    # 2. Test plotting with mixed k (1-species, 4-species, 8-species, empty)
+    species_8 = ["NYCNOC", "PIPNAT", "PIPPYG", "PLEUAR", "EPTNIL", "VESMUR", "MYODAB", "MYOMYS"]
+    rows = []
+    # 20:00: 1 species
+    rows.append({"interval": "20:00", "species": "NYCNOC", "obs_type": "SOC"})
+    # 20:15: 0 species (empty)
+    # 20:30: 4 species
+    for sp in species_8[:4]:
+        rows.append({"interval": "20:30", "species": sp, "obs_type": "SOC"})
+    # 20:45: 8 species
+    for sp in species_8:
+        rows.append({"interval": "20:45", "species": sp, "obs_type": "SOC"})
+
+    df_long = pd.DataFrame(rows)
+    all_intervals = ["20:00", "20:15", "20:30", "20:45"]
+    type_order = ["SOC", "SOF", "FOD", "FORBI"]
+    color_dict = {"SOC": "#ff0000", "SOF": "#00ff00", "FOD": "#0000ff", "FORBI": "#ffff00"}
+
+    saved_xticks = []
+    saved_bars = []
+    saved_bottom_xticks = []
+
+    real_savefig = plt.savefig
+    def mock_savefig(out_path, *args, **kwargs):
+        fig = plt.gcf()
+        axes = fig.get_axes()
+        ax_bottom = axes[0]
+        ax_top = axes[1] if len(axes) > 1 else axes[0]
+
+        saved_xticks.extend(ax_top.get_xticks().tolist())
+        saved_bottom_xticks.extend(ax_bottom.get_xticks().tolist())
+        for patch in ax_bottom.patches:
+            saved_bars.append((patch.get_x(), patch.get_width(), patch.get_height()))
+        real_savefig(out_path, *args, **kwargs)
+
+    monkeypatch.setattr(plt, "savefig", mock_savefig)
+
+    with tempfile.TemporaryDirectory() as tmp_dir:
+        out_png = os.path.join(tmp_dir, "geom_test.png")
+        core._plot_all_species_grouped_stacked(
+            df_long=df_long,
+            all_intervals=all_intervals,
+            species_list=species_8,
+            type_order=type_order,
+            color_dict=color_dict,
+            out_path=out_png,
+            title_text="Geometry Test",
+            ymax_mode="zoomed",
+            y_lim_global=5,
+        )
+
+    # All 4 slot centers must be equally spaced by slot_width (8.8 * 0.16 = 1.408)
+    expected_slot_w = 8.8 * 0.16
+    diffs = [saved_xticks[i+1] - saved_xticks[i] for i in range(len(saved_xticks)-1)]
+    for d in diffs:
+        assert d == pytest.approx(expected_slot_w)
+
+    # 1-species, 4-species, 8-species, and empty intervals all have exact same slot_width
+    assert len(saved_xticks) == 4
+
+    # Check non-overlapping bars in 8-species slot (20:45)
+    slot_3_center = saved_xticks[3]
+    bars_slot_3 = sorted([b for b in saved_bars if abs((b[0] + b[1]/2.0) - slot_3_center) < expected_slot_w / 2.0], key=lambda b: b[0])
+    assert len(bars_slot_3) == 8
+    for i in range(len(bars_slot_3) - 1):
+        left_right = bars_slot_3[i][0] + bars_slot_3[i][1]
+        right_left = bars_slot_3[i+1][0]
+        assert left_right <= right_left + 1e-9, "Bars in slot 3 overlap!"
+
+    # Species labels align with bar centers
+    bar_centers = [b[0] + b[1]/2.0 for b in sorted(saved_bars, key=lambda b: b[0])]
+    for bc, sx in zip(bar_centers, saved_bottom_xticks):
+        assert bc == pytest.approx(sx)
+
 
 
 
