@@ -698,27 +698,6 @@ def build_all_species_grouped_data(
     return grouped_items, peak_bar_height
 
 
-def _plot_all_species_grouped_stacked(
-    df_long: pd.DataFrame,
-    all_intervals: list[str],
-    species_list: list[str],
-    type_order: list[str],
-    color_dict: dict[str, str],
-    out_path: str,
-    title_text: str,
-    ymax_mode: str,
-    y_lim_global: int,
-):
-    """Plot grouped stacked bar chart for all species across time intervals (#9).
-    
-    Layout specifications:
-    - Dual horizontal axes:
-        * Top axis (`ax_top`): 15-minute time labels centered over equal-width slots.
-        * Bottom axis (`ax`): Vertical species labels directly under rendered species bars.
-    - Subtle vertical dotted separators between adjacent 15-minute time slots.
-    - Stacked bar count annotation centered above each non-zero species stack.
-    - Equal-width 15-minute slot geometry and adaptive non-overlapping bar widths preserved.
-    """
 def compute_all_species_geometry(max_k: int, num_intervals: int, scale: float = 1.0) -> dict[str, float | int]:
     """Compute unified all-species chart geometry derived from one shared base bar width (#9).
 
@@ -726,13 +705,20 @@ def compute_all_species_geometry(max_k: int, num_intervals: int, scale: float = 
       base_bar_width = 0.16 * scale
       species_spacing = base_bar_width
       slot_width = (max_k + 0.8) * base_bar_width
-      fig_w = max(12.0, num_intervals * slot_width * 2.5)
+
+      fig_scale = 0.11 / base_bar_width
+      width_per_interval = max(0.20, slot_width * fig_scale)
+      fig_w = max(8.0, min(35.0, num_intervals * width_per_interval + 2.5))
     """
     k_eff = max(1, int(max_k))
     base_bar_width = 0.16 * scale
     species_spacing = base_bar_width
     slot_width = (k_eff + 0.8) * base_bar_width
-    fig_w = max(12.0, float(num_intervals * slot_width * 2.5))
+
+    fig_scale = 0.11 / base_bar_width
+    width_per_interval = max(0.20, slot_width * fig_scale)
+    fig_w = max(8.0, min(35.0, float(num_intervals * width_per_interval + 2.5)))
+
     return {
         "max_k": k_eff,
         "base_bar_width": base_bar_width,

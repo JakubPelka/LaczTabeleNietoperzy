@@ -684,7 +684,13 @@ def test_reference_geometry_derivation_and_equal_slots(monkeypatch):
     assert g8["base_bar_width"] == 0.16
     assert g8["species_spacing"] == 0.16
     assert g8["slot_width"] == pytest.approx(8.8 * 0.16)
-    assert g8["fig_w"] > 12.0
+
+    # Exact regression test for max_k=8, bar_w=0.16, slot_w=1.408, num_intervals=31 -> ~32.5 inches
+    g31 = core.compute_all_species_geometry(max_k=8, num_intervals=31)
+    assert g31["base_bar_width"] == 0.16
+    assert g31["species_spacing"] == 0.16
+    assert g31["slot_width"] == pytest.approx(1.408)
+    assert g31["fig_w"] == pytest.approx(32.508, abs=0.1)
 
     # 2. Test plotting with mixed k (1-species, 4-species, 8-species, empty)
     species_8 = ["NYCNOC", "PIPNAT", "PIPPYG", "PLEUAR", "EPTNIL", "VESMUR", "MYODAB", "MYOMYS"]
